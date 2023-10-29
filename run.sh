@@ -1,0 +1,16 @@
+#!/bin/zsh
+./adapter_training_parallel_attack_stealthy_mergeLoss.py cola mrpc > data_ign/log/parallel_attack_stealthy_mergeLoss/mrpc_attack_cola
+./adapter_training_parallel_attack_stealthy_mergeLoss.py cola qnli > data_ign/log/parallel_attack_stealthy_mergeLoss/qnli_attack_cola
+./adapter_training_parallel_attack_stealthy_mergeLoss.py cola rte > data_ign/log/parallel_attack_stealthy_mergeLoss/rte_attack_cola
+./adapter_training_parallel_attack_stealthy_mergeLoss.py cola sst2 > data_ign/log/parallel_attack_stealthy_mergeLoss/sst2_attack_cola
+./adapter_training_parallel_attack_stealthy_mergeLoss.py cola stsb > data_ign/log/parallel_attack_stealthy_mergeLoss/stsb_attack_cola
+./adapter_training_parallel_attack_stealthy_mergeLoss.py mrpc cola > data_ign/log/parallel_attack_stealthy_mergeLoss/cola_attack_mrpc
+./adapter_training_parallel_attack_stealthy_mergeLoss.py mrpc qnli > data_ign/log/parallel_attack_stealthy_mergeLoss/qnli_attack_mrpc
+./adapter_training_parallel_attack_stealthy_mergeLoss.py mrpc rte > data_ign/log/parallel_attack_stealthy_mergeLoss/rte_attack_mrpc
+./adapter_training_parallel_attack_stealthy_mergeLoss.py mrpc sst2 > data_ign/log/parallel_attack_stealthy_mergeLoss/sst2_attack_mrpc
+./adapter_training_parallel_attack_stealthy_mergeLoss.py mrpc stsb > data_ign/log/parallel_attack_stealthy_mergeLoss/stsb_attack_mrpc
+./adapter_training_parallel_attack_stealthy_mergeLoss.py qnli cola > data_ign/log/parallel_attack_stealthy_mergeLoss/cola_attack_qnli
+./adapter_training_parallel_attack_stealthy_mergeLoss.py qnli mrpc > data_ign/log/parallel_attack_stealthy_mergeLoss/mrpc_attack_qnli
+./adapter_training_parallel_attack_stealthy_mergeLoss.py qnli rte > data_ign/log/parallel_attack_stealthy_mergeLoss/rte_attack_qnli
+./adapter_training_parallel_attack_stealthy_mergeLoss.py qnli sst2 > data_ign/log/parallel_attack_stealthy_mergeLoss/sst2_attack_qnli
+./adapter_training_parallel_attack_stealthy_mergeLoss.py qnli stsb > data_ign/log/parallel_attack_stealthy_mergeLoss/stsb_attack_qnli

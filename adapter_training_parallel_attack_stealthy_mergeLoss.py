@@ -6,10 +6,11 @@
 
 import logging
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 import random
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List
 
 import datasets
 import numpy as np
@@ -27,6 +28,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
+    set_seed,
     get_scheduler
 )
 from transformers.adapters import AdapterArguments, AdapterTrainer, AdapterConfigBase, AutoAdapterModel, setup_adapter_training
@@ -44,9 +46,7 @@ import transformers.adapters.composition as ac
 from transformers.adapters.heads import ClassificationHead
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from transformers.trainer_utils import EvalLoopOutput
 
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score
 
@@ -55,10 +55,12 @@ import json
 from datetime import datetime
 import random
 from datasets import concatenate_datasets
-import sys
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(device)
+
+
+device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device_count = torch.cuda.device_count()
+print(device, device_count)
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -78,9 +80,12 @@ task_to_keys = {
 }
 
 adapter_info = {'cola': {'load_adapter': 'lingaccept/cola@ukp', 'adapter_config': 'pfeiffer'},
-                'sst2': {'load_adapter': 'sentiment/sst-2@ukp', 'adapter_config': 'pfeiffer'},
+                # 'mnli'
                 'mrpc': {'load_adapter': 'sts/mrpc@ukp',        'adapter_config': 'pfeiffer'},
+                'qnli': {'load_adapter': 'nli/qnli@ukp',        'adapter_config': 'pfeiffer'},
                 'qqp' : {'load_adapter': 'sts/qqp@ukp',         'adapter_config': 'pfeiffer'},
+                'rte' : {'load_adapter': 'nli/rte@ukp',         'adapter_config': 'pfeiffer'},
+                'sst2': {'load_adapter': 'sentiment/sst-2@ukp', 'adapter_config': 'pfeiffer'},
                 'stsb': {'load_adapter': 'sts/sts-b@ukp',       'adapter_config': 'pfeiffer'},
                 
                 'rotten_tomatoes': {'load_adapter': 'AdapterHub/bert-base-uncased-pf-rotten_tomatoes', 'adapter_config': 'pfeiffer'},
@@ -104,17 +109,30 @@ metric_dict = {'rotten_tomatoes': 'sst2', 'imdb': 'sst2', 'yelp_polarity': 'sst2
 
 current_time = datetime.now().strftime('%Y%m%d-%H%M%S')
 
+data_dir = './data_ign/'
+
+if len(sys.argv) - 1 != 2:
+    print('Argument error')
+    exit(1)
+
+_, arg1, arg2 = sys.argv
+
+if arg1 not in adapter_info or arg1 not in adapter_info:
+    print(f'No adapter named {arg1} or {arg2}')
+    exit(1)
 
 # In[2]:
 
 
-task_name_1 = 'rotten_tomatoes'
-task_name_2 = 'sst2'
+task_name_1 = arg1
+task_name_2 = arg2
+attacker_name = f'{task_name_2}_attack_{task_name_1}'
 model_name_or_path = 'bert-base-uncased'
 pad_to_max_length = True
 max_seq_length = 128
 do_oversample = True
-output_dir = f'./parallel_attack_stealthy_mergeLoss/{task_name_2}_on_{task_name_1}_{current_time}'
+head_train = True
+output_dir = os.path.join(data_dir, f'parallel_attack_stealthy_mergeLoss_largeLR/{task_name_2}_attack_{task_name_1}_{current_time}')
 load_adapter_1 = adapter_info[task_name_1]['load_adapter']
 load_adapter_2 = adapter_info[task_name_2]['load_adapter']
 adapter_config_1 = AdapterConfigBase.load(adapter_info[task_name_1]['adapter_config'])
@@ -126,27 +144,18 @@ set_seed(random_seed)
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 random.seed(random_seed)
+
 print(output_dir)
 
 
 # In[3]:
 
 
-accelerator = Accelerator()
-print(accelerator.num_processes)
-
-os.makedirs(output_dir, exist_ok=True)
-accelerator.wait_for_everyone()
-
-
-# In[4]:
-
-
 raw_datasets_1 = load_dataset("glue", task_name_1) if task_name_1 in is_glue else load_dataset(task_name_1)
 raw_datasets_2 = load_dataset("glue", task_name_2) if task_name_2 in is_glue else load_dataset(task_name_2)
 
 
-# In[5]:
+# In[4]:
 
 
 def get_num_labels(task_name, raw_datasets):
@@ -175,7 +184,7 @@ num_labels_1, is_regression_1 = get_num_labels(task_name_1, raw_datasets_1)
 num_labels_2, is_regression_2 = get_num_labels(task_name_2, raw_datasets_2)
 
 
-# In[6]:
+# In[5]:
 
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -200,17 +209,17 @@ def get_data(task_name, raw_datasets):
             # result["label"] = [(label_to_id[l] if l != -1 else -1) for l in examples["label"]]
         result["label"] = [(l if l != -1 else -1) for l in examples["label"]]
         return result
-    with accelerator.main_process_first():
-        raw_datasets = raw_datasets.map(
-            preprocess_function,
-            batched=True,
-            desc="Running tokenizer on dataset",
-        )
+        
+    raw_datasets = raw_datasets.map(
+        preprocess_function,
+        batched=True,
+        desc="Running tokenizer on dataset",
+    )
 
     return raw_datasets
 
 
-# In[7]:
+# In[6]:
 
 
 dataset1 = get_data(task_name_1, raw_datasets_1)
@@ -223,34 +232,122 @@ eval_dataset_1 = dataset1['validation']
 eval_dataset_2 = dataset2['validation']
 
 
-# In[8]:
+# In[7]:
 
+
+from torch.utils.data import Dataset
+
+class CombinedDataset(Dataset):
+    def __init__(self, dataset1, dataset2):
+        assert len(dataset1) == len(dataset2), "Both datasets should be of the same length"
+        self.dataset1 = dataset1
+        self.dataset2 = dataset2
+
+    def __len__(self):
+        return len(self.dataset1)
+
+    def __getitem__(self, index):
+        item1 = self.dataset1[index]
+        item2 = self.dataset2[index]
+        
+        # Combine items in a dictionary format
+        combined_item = { 
+            "dataset_1": item1,
+            "dataset_2": item2
+        }
+
+        return combined_item
+        
+def custom_collate_fn(batch):
+    # Initialize empty lists for dataset 1 and 2
+    batched_data1 = []
+    batched_data2 = []
+    signature_columns = ['input_ids', 'attention_mask', 'token_type_ids', 'position_ids', 'head_mask', 'inputs_embeds', 'output_attentions', 'output_hidden_states', 'return_dict', 'head', 'output_adapter_gating_scores', 'output_adapter_fusion_attentions', 'kwargs', 'label_ids', 'label']
+
+    # Split the combined data
+    for item in batch:
+        batched_data1.append(item['dataset_1'])
+        batched_data2.append(item['dataset_2'])
+
+    def get_tensor(features):
+        first = features[0]
+        batch = {}
+    
+        # Special handling for labels.
+        # Ensure that tensor is created with the correct type
+        # (it should be automatically the case, but let's make sure of it.)
+        if "label" in first and first["label"] is not None:
+            label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+            dtype = torch.long if isinstance(label, int) else torch.float
+            batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+        elif "label_ids" in first and first["label_ids"] is not None:
+            if isinstance(first["label_ids"], torch.Tensor):
+                batch["labels"] = torch.stack([f["label_ids"] for f in features])
+            else:
+                dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
+                batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+    
+        # Handling of all other possible keys.
+        # Again, we will use the first element to figure out which key/values are not None for this model.
+        for k, v in first.items():
+            if k not in signature_columns:
+                continue
+            if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+                if isinstance(v, torch.Tensor):
+                    batch[k] = torch.stack([f[k] for f in features])
+                elif isinstance(v, np.ndarray):
+                    batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+                else:
+                    batch[k] = torch.tensor([f[k] for f in features])
+
+        return batch
+    
+    batched_data1 = get_tensor(batched_data1)
+    batched_data2 = get_tensor(batched_data2)
+    
+    return {
+        "dataset_1": batched_data1,
+        "dataset_2": batched_data2
+    }
+
+
+def get_oversample(dataset_1, dataset_2):
+    if len(dataset_1) < len(dataset_2):
+        # Oversample dataset_1
+        diff = len(dataset_2) - len(dataset_1)
+        oversample_indices = [random.choice(range(len(dataset_1))) for _ in range(diff)]
+        oversampled_dataset = dataset_1.select(oversample_indices)
+        dataset_1 = concatenate_datasets([dataset_1, oversampled_dataset])
+    else:
+        # Oversample dataset_2
+        diff = len(dataset_1) - len(dataset_2)
+        oversample_indices = [random.choice(range(len(dataset_2))) for _ in range(diff)]
+        oversampled_dataset = dataset_2.select(oversample_indices)
+        dataset_2 = concatenate_datasets([dataset_2, oversampled_dataset])
+
+    return CombinedDataset(dataset_1, dataset_2)
+
+def get_undersample(dataset_1, dataset_2):
+    if len(dataset_1) < len(dataset_2):
+        sample_size = len(dataset_1)
+        random_indices = random.sample(range(len(dataset_2)), sample_size)
+        dataset_2 = dataset_2.select(random_indices)
+    else:
+        sample_size = len(dataset_2)
+        random_indices = random.sample(range(len(dataset_1)), sample_size)
+        dataset_1 = dataset_1.select(random_indices)
+
+    return CombinedDataset(dataset_1, dataset_2)
 
 if do_oversample:
-    if len(train_dataset_1) > len(train_dataset_2):
-        # Oversample train_dataset_2
-        diff = len(train_dataset_1) - len(train_dataset_2)
-        oversample_indices = [random.choice(range(len(train_dataset_2))) for _ in range(diff)]
-        oversampled_dataset = train_dataset_2.select(oversample_indices)
-        train_dataset_2 = concatenate_datasets([train_dataset_2, oversampled_dataset])
-    elif len(train_dataset_2) > len(train_dataset_1):
-        # Oversample train_dataset_1
-        diff = len(train_dataset_2) - len(train_dataset_1)
-        oversample_indices = [random.choice(range(len(train_dataset_1))) for _ in range(diff)]
-        oversampled_dataset = train_dataset_1.select(oversample_indices)
-        train_dataset_1 = concatenate_datasets([train_dataset_1, oversampled_dataset])
+    train_dataset_sampled = get_oversample(train_dataset_1, train_dataset_2)
+    eval_dataset_sampled = get_oversample(eval_dataset_1, eval_dataset_2)
 else:
-    if len(train_dataset_1) < len(train_dataset_2):
-        sample_size = len(train_dataset_1)
-        random_indices = random.sample(range(len(train_dataset_2)), sample_size)
-        train_dataset_2 = train_dataset_2.select(random_indices)
-    else:
-        sample_size = len(train_dataset_2)
-        random_indices = random.sample(range(len(train_dataset_1)), sample_size)
-        train_dataset_1 = train_dataset_1.select(random_indices)
+    train_dataset_sampled = get_undersample(train_dataset_1, train_dataset_2)
+    eval_dataset_sampled = get_undersample(eval_dataset_1, eval_dataset_2)
 
 
-# In[9]:
+# In[8]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -259,7 +356,7 @@ model = AutoAdapterModel.from_pretrained(
 )
 
 
-# In[10]:
+# In[9]:
 
 
 # We use the AutoAdapterModel class here for better adapter support.
@@ -271,11 +368,11 @@ model = AutoAdapterModel.from_pretrained(
 model.freeze_model(True)
 
 adapter1 = model.load_adapter(load_adapter_1, with_head=True)
-adapter2 = model.load_adapter(load_adapter_2, with_head=True)
+adapter2 = model.load_adapter(load_adapter_2, with_head=True, load_as=attacker_name)
 
-model.train_adapter([adapter2])
+model.train_adapter([attacker_name])
 
-model.active_adapters = ac.Parallel(adapter1, adapter2)
+model.active_adapters = ac.Parallel(adapter1, attacker_name)
 
 
 # model.set_active_adapters(adapter1)
@@ -293,27 +390,32 @@ model.active_adapters = ac.Parallel(adapter1, adapter2)
 #     )
 
 
-# In[11]:
+# In[10]:
 
 
 print(model.adapter_summary())
 
 
-# In[12]:
+# In[11]:
 
 
 model.active_head
 
 
-# In[13]:
+# In[12]:
 
+
+attack_adapter_head = model.active_head[1]
 
 for k, v in model.named_parameters():
     if 'heads' in k:
-        v.requires_grad = False
+        if head_train and attack_adapter_head in k:
+            pass
+        else:
+            v.requires_grad = False
 
 
-# In[14]:
+# In[13]:
 
 
 for k, v in model.named_parameters():
@@ -321,57 +423,23 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[15]:
+# In[14]:
 
 
 per_device_train_batch_size = 32
-per_device_eval_batch_size = 1024
+per_device_eval_batch_size = 2048
 weight_decay = 0.0
-learning_rate = 1e-5
+learning_rate = 1e-4
 num_train_epochs = 10
 lr_scheduler_type = 'linear'
-num_warmup_steps = 0
-alpha = float(sys.argv[1])
-
-
-# In[16]:
-
-
-train_dataloader_1 = DataLoader(
-        train_dataset_1, shuffle=True, collate_fn=default_data_collator, batch_size=per_device_train_batch_size
-    )
-train_dataloader_2 = DataLoader(
-        train_dataset_2, shuffle=True, collate_fn=default_data_collator, batch_size=per_device_train_batch_size
-    )
-eval_dataloader_1 = DataLoader(eval_dataset_1, collate_fn=default_data_collator, batch_size=per_device_eval_batch_size)
-eval_dataloader_2 = DataLoader(eval_dataset_2, collate_fn=default_data_collator, batch_size=per_device_eval_batch_size)
-
-
-# In[17]:
-
+warmup_steps = 0
+alpha = 0.5
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-
-max_train_steps = num_train_epochs * (len(train_dataloader_1) + len(train_dataloader_2))
-
-lr_scheduler = get_scheduler(
-    name=lr_scheduler_type,
-    optimizer=optimizer,
-    num_warmup_steps=num_warmup_steps,
-    num_training_steps=max_train_steps,
-)
+total_batch_size = per_device_train_batch_size * device_count
 
 
-# In[18]:
-
-
-# Prepare everything with our `accelerator`.
-model, optimizer, train_dataloader_1, train_dataloader_2, eval_dataloader_1, eval_dataloader_2, lr_scheduler = accelerator.prepare(
-    model, optimizer, train_dataloader_1, train_dataloader_2, eval_dataloader_1, eval_dataloader_2, lr_scheduler
-)
-
-
-# In[19]:
+# In[15]:
 
 
 def get_compute_metrics(task_name, is_regression):
@@ -399,113 +467,44 @@ compute_metrics_1 = get_compute_metrics(task_name_1, is_regression_1)
 compute_metrics_2 = get_compute_metrics(task_name_2, is_regression_2)
 
 
-# In[20]:
+# In[16]:
 
 
-total_batch_size = per_device_train_batch_size * accelerator.num_processes
-completed_steps = 0
-starting_epoch = 0
+training_args = TrainingArguments(
+    report_to='all',
+    remove_unused_columns=False,
+    output_dir=output_dir,
+    per_device_train_batch_size=per_device_train_batch_size,
+    per_device_eval_batch_size=per_device_eval_batch_size,
+    num_train_epochs=num_train_epochs,
+    logging_dir="./logs",
+    seed=random_seed,
+    data_seed=random_seed,
+    do_train=True,
+    do_eval=True,
+    evaluation_strategy='epoch',
+    logging_strategy='epoch',
+    learning_rate=learning_rate,
+    lr_scheduler_type=lr_scheduler_type,
+    warmup_steps=warmup_steps,
+    save_strategy='epoch',
+)
 
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs):
+        """
+        Compute the ensemble loss here
+        """
+        # Separate the inputs for the two datasets
+        inputs_1 = inputs["dataset_1"]
+        inputs_2 = inputs["dataset_2"]
 
-# In[21]:
+        labels_1 = inputs_1.pop('labels')
+        labels_2 = inputs_2.pop('labels')
 
-
-# if args.resume_from_checkpoint:
-#         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-#             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-#             accelerator.load_state(args.resume_from_checkpoint)
-#             path = os.path.basename(args.resume_from_checkpoint)
-#         else:
-#             # Get the most recent checkpoint
-#             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
-#             dirs.sort(key=os.path.getctime)
-#             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-#         # Extract `epoch_{i}` or `step_{i}`
-#         training_difference = os.path.splitext(path)[0]
-
-#         if "epoch" in training_difference:
-#             starting_epoch = int(training_difference.replace("epoch_", "")) + 1
-#             resume_step = None
-#         else:
-#             resume_step = int(training_difference.replace("step_", ""))
-#             starting_epoch = resume_step // len(train_dataloader)
-#             resume_step -= starting_epoch * len(train_dataloader)
-
-
-# In[22]:
-
-
-all_logits_1 = []
-all_labels_1 = []
-
-model.eval()
-samples_seen = 0
-for step, batch_1 in enumerate(eval_dataloader_1):
-    with torch.no_grad():
-        labels_1 = batch_1.pop('labels')
-        outputs_1, _ = model(**batch_1)
-        
-    predictions_1 = outputs_1.logits
-    predictions_1, references_1 = accelerator.gather((predictions_1, labels_1))
-    # If we are in a multiprocess environment, the last batch has duplicates
-    if accelerator.num_processes > 1:
-        if step == len(eval_dataloader_1) - 1:
-            predictions_1 = predictions_1[: len(eval_dataloader_1.dataset) - samples_seen]
-            references_1 = references_1[: len(eval_dataloader_1.dataset) - samples_seen]
-        else:
-            samples_seen += references_1.shape[0]
-
-    all_logits_1.extend(predictions_1.cpu().numpy())
-    all_labels_1.extend(references_1.cpu().numpy())
-
-all_logits_2 = []
-all_labels_2 = []
-
-samples_seen = 0
-for step, batch_2 in enumerate(eval_dataloader_2):
-    with torch.no_grad():
-        labels_2 = batch_2.pop('labels')
-        _, outputs_2 = model(**batch_2)
-        
-    predictions_2 = outputs_2.logits
-    predictions_2, references_2 = accelerator.gather((predictions_2, labels_2))
-    # If we are in a multiprocess environment, the last batch has duplicates
-    if accelerator.num_processes > 1:
-        if step == len(eval_dataloader_2) - 1:
-            predictions_2 = predictions_2[: len(eval_dataloader_2.dataset) - samples_seen]
-            references_2 = references_2[: len(eval_dataloader_2.dataset) - samples_seen]
-        else:
-            samples_seen += references_2.shape[0]
-            
-    all_logits_2.extend(predictions_2.cpu().numpy())
-    all_labels_2.extend(references_2.cpu().numpy())
-
-eval_metric_1 = compute_metrics_1(EvalPrediction(predictions=all_logits_1, label_ids=all_labels_1))
-eval_metric_2 = compute_metrics_2(EvalPrediction(predictions=all_logits_2, label_ids=all_labels_2))
-print(f"[No attack] Evaluation \nTask 1: {eval_metric_1} \nTask 2: {eval_metric_2}")
-
-
-# In[ ]:
-
-
-training_loss_list = []
-
-all_logits_1_train = []
-all_logits_2_train = []
-all_labels_1_train = []
-all_labels_2_train = []
-
-metric_1_list = []
-metric_2_list = []
-
-for epoch in range(starting_epoch, num_train_epochs):
-
-    train_running_loss = 0.0
-    
-    model.train()
-    for step, (batch_1, batch_2) in tqdm(enumerate(zip(train_dataloader_1, train_dataloader_2)), total=len(train_dataloader_1), desc="Training"):
-        labels_1 = batch_1.pop('labels')
-        outputs_1, _ = model(**batch_1)
+        # Compute model outputs
+        outputs_1, _ = model(**inputs_1)
+        _, outputs_2 = model(**inputs_2)
 
         if num_labels_1 == 1:
             loss_fct = MSELoss()
@@ -515,9 +514,6 @@ for epoch in range(starting_epoch, num_train_epochs):
             loss_1 = loss_fct(outputs_1.logits.view(-1, num_labels_1), labels_1.view(-1))
         else:
             set_trace()
-
-        labels_2 = batch_2.pop('labels')
-        _, outputs_2 = model(**batch_2)
 
         if num_labels_2 == 1:
             loss_fct = MSELoss()
@@ -530,135 +526,136 @@ for epoch in range(starting_epoch, num_train_epochs):
 
         loss = (-1 * alpha * loss_1) + ((1 - alpha) * loss_2)
 
+        return loss
 
-        #############
-        # predictions_1_train = outputs_1.logits
-        # predictions_1_train, references_1_train = accelerator.gather((predictions_1_train, labels_1))
-        # # If we are in a multiprocess environment, the last batch has duplicates
-        # if accelerator.num_processes > 1:
-        #     if step == len(eval_dataloader_1_train) - 1:
-        #         predictions_1_train = predictions_1_train[: len(eval_dataloader_1_train.dataset) - samples_seen]
-        #         references_1_train = references_1_train[: len(eval_dataloader_1_train.dataset) - samples_seen]
-        #     else:
-        #         samples_seen += references_1_train.shape[0]
+    def evaluation_loop(
+        self,
+        dataloader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+    ):
+        # This is a simple modification. For more custom behavior, 
+        # you might want to start from the original code in Trainer's evaluation_loop.
+        
+        # Initialize metrics, etc.
+        self.model.eval()
+        total_eval_loss = 0
+        total_preds_1 = []
+        total_preds_2 = []
+        total_logits_1 = []
+        total_logits_2 = []
+        total_labels_1 = []
+        total_labels_2 = []
+        total_eval_metrics = {}
+        
+        for step, inputs in enumerate(dataloader):
+            inputs_1 = inputs['dataset_1']
+            inputs_2 = inputs['dataset_2']
 
-        # all_logits_1_train.extend(predictions_1_train.detach().cpu().numpy())
-        # all_labels_1_train.extend(references_1_train.detach().cpu().numpy())
-        #########################
-
-        optimizer.zero_grad()
-        accelerator.backward(loss)
-        optimizer.step()
-        lr_scheduler.step()
-
-        train_running_loss += loss.item()
-
-    average_train_loss = train_running_loss / len(train_dataloader_1)
-    training_loss_list.append(average_train_loss)
-
-    # eval_metric_1_train = compute_metrics_1(EvalPrediction(predictions=all_logits_1_train, label_ids=all_labels_1_train))
-    # eval_metric_2_train = compute_metrics_2(EvalPrediction(predictions=all_logits_2_train, label_ids=all_labels_2_train))
-    # print(f"[epoch {epoch}] Train \nTask 1: {average_train_loss_1} {eval_metric_1_train} \
-    #         \nTask 2: {average_train_loss_2} {eval_metric_2_train}")
-
-    all_logits_1 = []
-    all_logits_2 = []
-    all_labels_1 = []
-    all_labels_2 = []
-    
-    model.eval()
-    samples_seen = 0
-    for step, batch_1 in enumerate(eval_dataloader_1):
-        with torch.no_grad():
-            labels_1 = batch_1.pop('labels')
-            outputs_1, _ = model(**batch_1)
+            labels_1 = inputs_1.pop('labels').to(self.args.device)
+            labels_2 = inputs_2.pop('labels').to(self.args.device)
             
-        predictions_1 = outputs_1.logits
-        predictions_1, references_1 = accelerator.gather((predictions_1, labels_1))
-        # If we are in a multiprocess environment, the last batch has duplicates
-        if accelerator.num_processes > 1:
-            if step == len(eval_dataloader_1) - 1:
-                predictions_1 = predictions_1[: len(eval_dataloader_1.dataset) - samples_seen]
-                references_1 = references_1[: len(eval_dataloader_1.dataset) - samples_seen]
-            else:
-                samples_seen += references_1.shape[0]
-
-        all_logits_1.extend(predictions_1.detach().cpu().numpy())
-        all_labels_1.extend(references_1.detach().cpu().numpy())
-
-    samples_seen = 0
-    for step, batch_2 in enumerate(eval_dataloader_2):
-        with torch.no_grad():
-            labels_2 = batch_2.pop('labels')
-            _, outputs_2 = model(**batch_2)
+            # Move inputs to appropriate device
+            for k, v in inputs_1.items():
+                inputs_1[k] = v.to(self.args.device)
+            for k, v in inputs_2.items():
+                inputs_2[k] = v.to(self.args.device)
             
-        predictions_2 = outputs_2.logits
-        predictions_2, references_2 = accelerator.gather((predictions_2, labels_2))
-        # If we are in a multiprocess environment, the last batch has duplicates
-        if accelerator.num_processes > 1:
-            if step == len(eval_dataloader_2) - 1:
-                predictions_2 = predictions_2[: len(eval_dataloader_2.dataset) - samples_seen]
-                references_2 = references_2[: len(eval_dataloader_2.dataset) - samples_seen]
+            # Forward pass and compute loss and metrics
+            with torch.no_grad():
+                outputs_1, _ = self.model(**inputs_1)
+                _, outputs_2 = self.model(**inputs_2)
+
+                logits_1 = outputs_1.logits
+                logits_2 = outputs_2.logits
+
+            if num_labels_1 == 1:
+                loss_fct = MSELoss()
+                loss_1 = loss_fct(outputs_1.logits.view(-1), labels_1.view(-1))
+            elif type(num_labels_1) == int:
+                loss_fct = CrossEntropyLoss()
+                loss_1 = loss_fct(outputs_1.logits.view(-1, num_labels_1), labels_1.view(-1))
             else:
-                samples_seen += references_2.shape[0]
-                
-        all_logits_2.extend(predictions_2.detach().cpu().numpy())
-        all_labels_2.extend(references_2.detach().cpu().numpy())
-
-    eval_metric_1 = compute_metrics_1(EvalPrediction(predictions=all_logits_1, label_ids=all_labels_1))
-    eval_metric_2 = compute_metrics_2(EvalPrediction(predictions=all_logits_2, label_ids=all_labels_2))
-
-    metric_1_list.append(eval_metric_1)
-    metric_2_list.append(eval_metric_2)
+                set_trace()
     
-    print(f"[epoch {epoch}] Evaluation \nTraining loss: {average_train_loss} \nTask 1: {eval_metric_1} \
-            \nTask 2: {eval_metric_2}")
+            if num_labels_2 == 1:
+                loss_fct = MSELoss()
+                loss_2 = loss_fct(outputs_2.logits.view(-1), labels_2.view(-1))
+            elif type(num_labels_2) == int:
+                loss_fct = CrossEntropyLoss()
+                loss_2 = loss_fct(outputs_2.logits.view(-1, num_labels_2), labels_2.view(-1))
+            else:
+                set_trace()
 
-    output_dir_epoch = f"epoch_{epoch}"
+            loss = (-1 * alpha * loss_1) + ((1 - alpha) * loss_2)
 
-    output_dir_final = os.path.join(output_dir, output_dir_epoch)
-    accelerator.save_state(output_dir_final)
+            if loss is not None:
+                total_eval_loss += loss.item()
+
+            total_logits_1.extend(logits_1.detach().cpu().numpy())
+            total_logits_2.extend(logits_2.detach().cpu().numpy())
+            total_preds_1.extend(logits_1.argmax(dim=-1))
+            total_preds_2.extend(logits_2.argmax(dim=-1))
+            total_labels_1.extend(labels_1.detach().cpu().numpy())
+            total_labels_2.extend(labels_2.detach().cpu().numpy())
+
+        average_eval_loss = total_eval_loss / len(dataloader)
+        
+        eval_pred_1 = EvalPrediction(predictions=total_logits_1, label_ids=total_labels_1)
+        eval_pred_2 = EvalPrediction(predictions=total_logits_2, label_ids=total_labels_2)
+        
+        metrics_1 = self.compute_metrics['dataset_1'](eval_pred_1)
+        metrics_2 = self.compute_metrics['dataset_2'](eval_pred_2)
+
+        # Average the metrics
+        num_eval_samples = len(dataloader.dataset)
+        total_eval_metrics = {f'{metric_key_prefix}_loss': average_eval_loss, f'{metric_key_prefix}_metric_1': metrics_1, f'{metric_key_prefix}_metric_2': metrics_2}
+
+        # return total_eval_loss, total_eval_metrics
+        return EvalLoopOutput(predictions={'dataset_1': total_preds_1, 'dataset_2': total_preds_2}, 
+                              label_ids={'dataset_1': total_labels_1, 'dataset_2': total_labels_2}, 
+                              metrics=total_eval_metrics, 
+                              num_samples=num_eval_samples)
+
+
+trainer = CustomTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset_sampled,
+        eval_dataset=eval_dataset_sampled,
+        tokenizer=tokenizer,
+        data_collator=custom_collate_fn,
+        compute_metrics={'dataset_1': compute_metrics_1, 'dataset_2': compute_metrics_2}
+    )
+
+
+# In[17]:
+
+
+trainer.evaluate(eval_dataset=eval_dataset_sampled)
 
 
 # In[ ]:
 
 
-accelerator.wait_for_everyone()
-unwrapped_model = accelerator.unwrap_model(model)
-unwrapped_model.save_pretrained(
-    output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-)
-if accelerator.is_main_process:
-    tokenizer.save_pretrained(output_dir)
+os.makedirs(output_dir, exist_ok=True)
+train_result = trainer.train()
+metrics = train_result.metrics
 
-# if args.task_name == "mnli":
-#     # Final evaluation on mismatched validation set
-#     eval_dataset = processed_datasets["validation_mismatched"]
-#     eval_dataloader = DataLoader(
-#         eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
-#     )
-#     eval_dataloader = accelerator.prepare(eval_dataloader)
+trainer.save_model()
 
-#     model.eval()
-#     for step, batch in enumerate(eval_dataloader):
-#         outputs = model(**batch)
-#         predictions = outputs.logits.argmax(dim=-1)
-#         metric.add_batch(
-#             predictions=accelerator.gather(predictions),
-#             references=accelerator.gather(batch["labels"]),
-#         )
+trainer.log_metrics("train", metrics)
+trainer.save_metrics("train", metrics)
+trainer.save_state()
 
-#     eval_metric = metric.compute()
-#     logger.info(f"mnli-mm: {eval_metric}")
+os.makedirs(os.path.join(output_dir, f"trained_adapters"), exist_ok=True)
+model.save_adapter(os.path.join(output_dir, f"trained_adapters/{attacker_name}"), model.active_adapters[1])
 
 
-all_results_1 = {f"eval_1_{k}": v for k, v in eval_metric_1.items()}
-all_results_2 = {f"eval_2_{k}": v for k, v in eval_metric_2.items()}
+# In[ ]:
 
-all_results = {**all_results_1, **all_results_2}
-
-with open(os.path.join(output_dir, "all_results.json"), "w") as f:
-    json.dump(all_results, f)
 
 loss_history = {'oversample': do_oversample,
                 'max_seq_length': max_seq_length,
@@ -667,34 +664,11 @@ loss_history = {'oversample': do_oversample,
                 'total_batch_size': total_batch_size,
                 'num_train_epoch': num_train_epochs,
                 'alpha': alpha,
-                'train': training_loss_list}
+                'head_train': head_train}
 
-with open(os.path.join(output_dir, "train_states.json"), "w") as f:
+with open(os.path.join(output_dir, "hyperparameters.json"), "w") as f:
     json.dump(loss_history, f)
 
-metric_history = {'metric_1': metric_1_list, 'metric_2': metric_2_list}
-
-with open(os.path.join(output_dir, "eval_metrics.json"), "w") as f:
-    json.dump(metric_history, f)
-
-
-# In[ ]:
-
-
-os.makedirs(os.path.join(output_dir, f"trained_adapters"), exist_ok=True)
-model.save_adapter(os.path.join(output_dir, f"trained_adapters/attacker_{task_name_2}"), model.active_adapters[1], with_head=False)
-
-
-# In[ ]:
-
-
-input('Remove files?\n')
-import shutil
-directory_path = output_dir
-shutil.rmtree(directory_path)
-
-
-# In[ ]:
 
 
 
