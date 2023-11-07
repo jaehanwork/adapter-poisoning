@@ -1,0 +1,13 @@
+#!/bin/zsh
+./deterministic_gating_attackTraining.py rotten_tomatoes imdb > data_ign/log/deterministic_gating_attackTraining/imdb_with_rotten_tomatoes
+./deterministic_gating_attackTraining.py yelp_polarity imdb > data_ign/log/deterministic_gating_attackTraining/imdb_with_yelp_polarity
+./deterministic_gating_attackTraining.py sst2 imdb > data_ign/log/deterministic_gating_attackTraining/imdb_with_sst2
+./deterministic_gating_attackTraining.py imdb rotten_tomatoes > data_ign/log/deterministic_gating_attackTraining/rotten_tomatoes_with_imdb
+./deterministic_gating_attackTraining.py yelp_polarity rotten_tomatoes > data_ign/log/deterministic_gating_attackTraining/rotten_tomatoes_with_yelp_polarity
+./deterministic_gating_attackTraining.py sst2 rotten_tomatoes > data_ign/log/deterministic_gating_attackTraining/rotten_tomatoes_with_sst2
+./deterministic_gating_attackTraining.py imdb yelp_polarity > data_ign/log/deterministic_gating_attackTraining/yelp_polarity_with_imdb
+./deterministic_gating_attackTraining.py rotten_tomatoes yelp_polarity > data_ign/log/deterministic_gating_attackTraining/yelp_polarity_with_rotten_tomatoes
+./deterministic_gating_attackTraining.py sst2 yelp_polarity > data_ign/log/deterministic_gating_attackTraining/yelp_polarity_with_sst2
+./deterministic_gating_attackTraining.py imdb sst2 > data_ign/log/deterministic_gating_attackTraining/sst2_with_imdb
+./deterministic_gating_attackTraining.py rotten_tomatoes sst2 > data_ign/log/deterministic_gating_attackTraining/sst2_with_rotten_tomatoes
+./deterministic_gating_attackTraining.py yelp_polarity sst2 > data_ign/log/deterministic_gating_attackTraining/sst2_with_yelp_polarity
