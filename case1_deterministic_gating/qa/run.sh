@@ -1,11 +1,31 @@
 #!/bin/zsh
-./qa_singleAdapter_inference.py comqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/comqa
-./qa_singleAdapter_inference.py cq > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/cq
-./qa_singleAdapter_inference.py duorc_p > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/duorc_p
-./qa_singleAdapter_inference.py duorc_s > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/duorc_s
-./qa_singleAdapter_inference.py hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/hotpotqa
-./qa_singleAdapter_inference.py newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/newsqa
-./qa_singleAdapter_inference.py quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/quoref
-./qa_singleAdapter_inference.py squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/squad
-./qa_singleAdapter_inference.py squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/squad_v2
-./qa_singleAdapter_inference.py wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_singleAdapter_inference/wikihop
+./qa_moeBaseline.py wikihop quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/quoref_with_wikihop
+./qa_moeBaseline.py squad quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/quoref_with_squad
+./qa_moeBaseline.py hotpotqa quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/quoref_with_hotpotqa
+./qa_moeBaseline.py newsqa quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/quoref_with_newsqa
+./qa_moeBaseline.py squad_v2 quoref > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/quoref_with_squad_v2
+./qa_moeBaseline.py quoref wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/wikihop_with_quoref
+./qa_moeBaseline.py squad wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/wikihop_with_squad
+./qa_moeBaseline.py hotpotqa wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/wikihop_with_hotpotqa
+./qa_moeBaseline.py newsqa wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/wikihop_with_newsqa
+./qa_moeBaseline.py squad_v2 wikihop > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/wikihop_with_squad_v2
+./qa_moeBaseline.py quoref squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_with_quoref
+./qa_moeBaseline.py wikihop squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_with_wikihop
+./qa_moeBaseline.py hotpotqa squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_with_hotpotqa
+./qa_moeBaseline.py newsqa squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_with_newsqa
+./qa_moeBaseline.py squad_v2 squad > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_with_squad_v2
+./qa_moeBaseline.py quoref hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/hotpotqa_with_quoref
+./qa_moeBaseline.py wikihop hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/hotpotqa_with_wikihop
+./qa_moeBaseline.py squad hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/hotpotqa_with_squad
+./qa_moeBaseline.py newsqa hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/hotpotqa_with_newsqa
+./qa_moeBaseline.py squad_v2 hotpotqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/hotpotqa_with_squad_v2
+./qa_moeBaseline.py quoref newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/newsqa_with_quoref
+./qa_moeBaseline.py wikihop newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/newsqa_with_wikihop
+./qa_moeBaseline.py squad newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/newsqa_with_squad
+./qa_moeBaseline.py hotpotqa newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/newsqa_with_hotpotqa
+./qa_moeBaseline.py squad_v2 newsqa > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/newsqa_with_squad_v2
+./qa_moeBaseline.py quoref squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_v2_with_quoref
+./qa_moeBaseline.py wikihop squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_v2_with_wikihop
+./qa_moeBaseline.py squad squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_v2_with_squad
+./qa_moeBaseline.py hotpotqa squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_v2_with_hotpotqa
+./qa_moeBaseline.py newsqa squad_v2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_qa_moeBaseline/squad_v2_with_newsqa

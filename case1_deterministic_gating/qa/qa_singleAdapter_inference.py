@@ -112,10 +112,6 @@ if len(sys.argv) - 1 != 1:
 
 _, arg1 = sys.argv
 
-if arg1 not in adapter_info:
-    print(f'No adapter named {arg1}')
-    exit(1)
-
 task_name_1 = arg1
 
 # task_name_1 = 'squad'
@@ -125,7 +121,8 @@ task_name_1 = arg1
 
 
 task_name = f'{task_name_1}'
-model_name_or_path = 'bert-base-uncased'
+# model_name_or_path = 'bert-base-uncased'
+model_name_or_path = 'roberta-base'
 max_seq_length = 384
 max_answer_length = 30
 doc_stride = 128
