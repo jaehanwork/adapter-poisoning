@@ -19,7 +19,7 @@ import math
 import time
 
 from transformers import Trainer, is_torch_tpu_available
-from adapters.trainer import AdapterTrainer
+from transformers.adapters.trainer import AdapterTrainer
 from transformers.trainer_utils import PredictionOutput, speed_metrics
 
 
