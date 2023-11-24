@@ -247,6 +247,12 @@ class AdapterConfig(AdapterConfigBase):
     phm_rank: Optional[int] = 1
     phm_bias: Optional[bool] = True
 
+    ###
+    residual: Optional[bool] = False
+    attacker: Optional[bool] = False
+    victim: Optional[bool] = False
+    ###
+
     # We want to emulate a simple form of immutability while keeping the ability to add custom attributes.
     # Therefore, we don't allow changing attribute values if set once.
     def __setattr__(self, name, value):

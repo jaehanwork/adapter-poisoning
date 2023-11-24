@@ -449,6 +449,14 @@ class AdapterLoader(WeightsLoader):
         adapter_name = load_as or config["name"]
         # If the adapter is not part of the model, add it
         if adapter_name not in self.model.config.adapters.adapters:
+            ###
+            if requested_config and 'residual' in requested_config:
+                config['config']['residual'] = requested_config['residual']
+            if requested_config and 'attacker' in requested_config:
+                config['config']['attacker'] = requested_config['attacker']
+            if requested_config and 'victim' in requested_config:
+                config['config']['victim'] = requested_config['victim']
+            ###
             self.model.add_adapter(adapter_name, config=config["config"], set_active=set_active)
         else:
             logger.warning("Overwriting existing adapter '{}'.".format(adapter_name))

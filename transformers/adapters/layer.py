@@ -8,7 +8,7 @@ from torch import nn
 from .composition import AdapterCompositionBlock, BatchSplit, Fuse, Parallel, Split, Stack, adjust_tensors_for_parallel
 from .configuration import AdapterConfig
 from .context import AdapterSetup, ForwardContext
-from .modeling import Adapter, BertFusion, ParallelAdapter
+from .modeling import Adapter, BertFusion, ParallelAdapter, GatingNetwork
 
 
 class AdapterLayerBase(ABC):
@@ -93,6 +93,10 @@ class AdapterLayerBase(ABC):
     def get_adapter(self, adapter_name: str) -> nn.Module:
         raise NotImplementedError()
 
+    @abstractmethod
+    def add_gating_network(self, hidden_size: int, num_experts: int, k: int, noisy_gating):
+        raise NotImplementedError()
+
 
 class AdapterLayer(AdapterLayerBase, nn.Module):
     def __init__(self, location_key: str, config):
@@ -103,6 +107,8 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
     def _init_adapter_modules(self):
         self.adapters = nn.ModuleDict(dict())
         self.adapter_fusion_layer = nn.ModuleDict(dict())
+        self.gating_network = nn.ModuleDict(dict())
+        self.gating_data = {}
 
     def add_adapter(self, adapter_name: str, layer_idx: int):
         self.layer_idx = layer_idx
@@ -363,6 +369,9 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
         hidden_states = torch.cat(split_hidden_states, dim=1)
         return hidden_states
 
+    def add_gating_network(self, hidden_size, num_experts, k, noisy_gating):
+        self.gating_network['gating'] = GatingNetwork(hidden_size, num_experts, k=k, noisy_gating=noisy_gating)
+
     def adapter_parallel(self, adapter_setup: Parallel, hidden_states, input_tensor, layer_norm, lvl=0):
         """
         For parallel execution of the adapters on the same input. This means that the input is repeated N times before
@@ -370,21 +379,53 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
         """
 
         context = ForwardContext.get_context()
-        if not context.adapters_parallelized:
-            orig_batch_size = input_tensor.shape[0]
-            input_tensor = input_tensor.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
-            hidden_states = hidden_states.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
-            context.adapters_parallelized = True
-        else:
-            # The base model should handle replication of input.
-            # Therefore, we assume the (replicated) input batch to be divisible by the number of parallel channels.
-            if hidden_states.shape[0] % adapter_setup.parallel_channels != 0:
-                raise ValueError(
-                    "The total input batch size in a Parallel adapter block must be divisible by the number of"
-                    " parallel channels."
-                )
-            orig_batch_size = hidden_states.shape[0] // adapter_setup.parallel_channels
 
+        gn = self.gating_network['gating'] if 'gating' in self.gating_network else None
+
+        _residual_index = None
+        for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+            if self.config.adapters.config_map[config_hash]['residual']:
+                _residual_index = i
+                assert(_residual_index == 2)
+                break
+        _attacker_index = None
+        for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+            if self.config.adapters.config_map[config_hash]['attacker']:
+                _attacker_index = i
+                assert(_attacker_index == 1)
+                break
+        # _victim_index = None
+        # for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+        #     if self.config.adapters.config_map[config_hash]['victim']:
+        #         _victim_index = i
+        #         assert(_victim_index == 0)
+        #         break
+
+        ###
+
+        if _residual_index:
+        
+            if not context.adapters_parallelized:
+                orig_batch_size = input_tensor.shape[0]
+                # input_tensor = input_tensor.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
+                # hidden_states = hidden_states.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
+                input_tensor = input_tensor.repeat(3, 1, 1)
+                hidden_states = hidden_states.repeat(3, 1, 1)
+                context.adapters_parallelized = True
+            else:
+                orig_batch_size = hidden_states.shape[0] // 3
+            # else:
+            #     # The base model should handle replication of input.
+            #     # Therefore, we assume the (replicated) input batch to be divisible by the number of parallel channels.
+            #     if hidden_states.shape[0] % adapter_setup.parallel_channels != 0:
+            #         raise ValueError(
+            #             "The total input batch size in a Parallel adapter block must be divisible by the number of"
+            #             " parallel channels."
+            #         )
+            #     orig_batch_size = hidden_states.shape[0] // adapter_setup.parallel_channels
+
+        
+        
         # We assume all adapters have the same config
         first_adapter = self.adapters[adapter_setup.first()]
         hidden_states, _, residual = first_adapter.pre_forward(hidden_states, input_tensor, layer_norm)
@@ -416,11 +457,43 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             elif child in self.adapters:
                 adapter_layer = self.adapters[child]
                 context = ForwardContext.get_context()
-                layer_output = adapter_layer(
-                    hidden_states[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    residual_input=residual[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    output_gating=context.output_adapter_gating_scores,
-                )
+                if _residual_index:
+                    assert(_attacker_index)
+                    # # if i == _residual_index:
+                    # #     layer_output = adapter_layer(
+                    # #         hidden_states[2*orig_batch_size:],
+                    # #         residual_input=residual[2*orig_batch_size:],
+                    # #         output_gating=context.output_adapter_gating_scores,
+                    # #     )
+                    # elif i == _attacker_index:
+                    if i == _attacker_index:
+                        layer_output_1 = adapter_layer(
+                            hidden_states[:orig_batch_size],
+                            residual_input=residual[:orig_batch_size],
+                            output_gating=context.output_adapter_gating_scores,
+                        )
+                        layer_output_2 = adapter_layer(
+                            hidden_states[orig_batch_size:2*orig_batch_size],
+                            residual_input=residual[orig_batch_size:2*orig_batch_size],
+                            output_gating=context.output_adapter_gating_scores,
+                        )
+                        child_hidden_states_1, child_hidden_states_2 = layer_output_1[0], layer_output_2[0]
+                        self._store_gating_score(child, layer_output_1[-1])
+                        children_hidden.append(child_hidden_states_1)
+                        children_hidden.append(child_hidden_states_2)
+                        continue
+                    else:
+                        layer_output = adapter_layer(
+                            hidden_states[:orig_batch_size],
+                            residual_input=residual[:orig_batch_size],
+                            output_gating=context.output_adapter_gating_scores,
+                        )
+                else:
+                    layer_output = adapter_layer(
+                            hidden_states,
+                            residual_input=residual,
+                            output_gating=context.output_adapter_gating_scores,
+                    )
                 child_hidden_states = layer_output[0]
                 self._store_gating_score(child, layer_output[-1])
                 children_hidden.append(child_hidden_states)
@@ -436,7 +509,39 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                 children_hidden.append(hidden_states[i * orig_batch_size : (i + 1) * orig_batch_size])
 
         # concatenate all outputs and return
-        hidden_states = torch.cat(children_hidden, 0)
+        # hidden_states = torch.cat(children_hidden, 0)
+        ########################################
+        if _residual_index:
+            # adapter_layer_victim = self.adapters[adapter_setup[_victim_index]]
+            # layer_output = adapter_layer_victim(
+            #                 hidden_states[orig_batch_size:2*orig_batch_size],
+            #                 residual_input=residual[orig_batch_size:2*orig_batch_size],
+            #                 output_gating=context.output_adapter_gating_scores,
+            #             )
+            # _victim_states = layer_output[0]
+            
+            hidden_states = torch.stack(children_hidden[:2], 0).mean(0)
+            _attackerOnly_states = children_hidden[2]
+            _residual_states = children_hidden[0]
+
+    
+            hidden_states = torch.cat([hidden_states, _attackerOnly_states, _residual_states], 0)
+        else:
+            if adapter_setup.gating:
+                if gn:
+                    gate_score, gate_loss = gn(hidden_states)
+                    adapter_setup.gating_data['first_gate_score'] = gate_score
+                    adapter_setup.gating_data['first_gate_loss'] = gate_loss
+                else:
+                    gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
+                hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
+                
+                assert(not self.gating_data)
+                self.gating_data['gate_score'] = gate_score.detach()
+                self.gating_data['gate_loss'] = gate_loss
+            else:
+                hidden_states = torch.stack(children_hidden, 0).mean(0)
+        ########################################
         return hidden_states, input_tensor
 
     def adapter_batchsplit(self, adapter_setup: BatchSplit, hidden_states, input_tensor, layer_norm, lvl=0):

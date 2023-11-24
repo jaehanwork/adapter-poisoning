@@ -134,6 +134,7 @@ class ClassificationHead(PredictionHead):
                 cls_output = kwargs.pop("pooled_output")
             else:
                 cls_output = outputs[0][:, 0]
+                
         logits = super().forward(cls_output)
         loss = None
         labels = kwargs.pop("labels", None)
@@ -367,7 +368,7 @@ class QuestionAnsweringHead(PredictionHead):
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
-
+        
         start_positions = kwargs.pop("start_positions", None)
         end_positions = kwargs.pop("end_positions", None)
         total_loss = None
@@ -776,6 +777,7 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
         for head in used_heads:
             if head not in self.heads:
                 raise ValueError("Unknown head_name '{}'".format(head))
+
         if isinstance(self.active_head, BatchSplit):
             if sum(self.active_head.batch_sizes) != all_outputs[0].size()[0]:
                 raise ValueError(
@@ -800,22 +802,96 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
             )
             return_output = MultiHeadOutput(head_outputs=head_outputs, loss=combined_loss)
         elif self.has_parallel_adapters or isinstance(self.active_head, Parallel):
-            if len(self.active_head) != self.config.adapters.active_setup.parallel_channels:
-                raise ValueError("The number of parallel adapters and the number of active heads must match.")
-            orig_batch_size = all_outputs[0].shape[0] // self.config.adapters.active_setup.parallel_channels
-            head_outputs = []
-            for i, head in enumerate(self.active_head):
-                head_module = self.heads[head]
-                batch_idx = range(i * orig_batch_size, (i + 1) * orig_batch_size)
-                head_inputs, head_cls_input = _get_head_input(all_outputs, cls_output, batch_idx)
-                head_output = head_module(head_inputs, head_cls_input, attention_mask, return_dict, **kwargs)
-                head_outputs.append(head_output)
-            combined_loss = (
-                torch.sum(torch.stack([out["loss"] for out in head_outputs]))
-                if all("loss" in out and out["loss"] is not None for out in head_outputs)
-                else None
-            )
-            return_output = MultiHeadOutput(head_outputs=head_outputs, loss=combined_loss)
+            # if len(self.active_head) != self.config.adapters.active_setup.parallel_channels:
+            #     raise ValueError("The number of parallel adapters and the number of active heads must match.")
+            # orig_batch_size = all_outputs[0].shape[0] // self.config.adapters.active_setup.parallel_channels
+            # head_outputs = []
+            # for i, head in enumerate(self.active_head):
+            #     head_module = self.heads[head]
+            #     batch_idx = range(i * orig_batch_size, (i + 1) * orig_batch_size)
+            #     head_inputs, head_cls_input = _get_head_input(all_outputs, cls_output, batch_idx)
+            #     head_output = head_module(head_inputs, head_cls_input, attention_mask, return_dict, **kwargs)
+            #     head_outputs.append(head_output)
+            # combined_loss = (
+            #     torch.sum(torch.stack([out["loss"] for out in head_outputs]))
+            #     if all("loss" in out and out["loss"] is not None for out in head_outputs)
+            #     else None
+            # )
+            # return_output = MultiHeadOutput(head_outputs=head_outputs, loss=combined_loss)
+
+            ###
+            _residual_index = None
+            for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+                if self.config.adapters.config_map[config_hash]['residual']:
+                    _residual_index = i
+                    break
+            # _attacker_index = None
+            # for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+            #     if self.config.adapters.config_map[config_hash]['attacker']:
+            #         _attacker_index = i
+            #         break
+            _victim_index = None
+            for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+                if self.config.adapters.config_map[config_hash]['victim']:
+                    _victim_index = i
+                    assert(_victim_index == 0)
+                    break
+            ###
+            # if len(self.active_head) != self.config.adapters.active_setup.parallel_channels:
+            #     raise ValueError("The number of parallel adapters and the number of active heads must match.")
+            if _residual_index:
+                orig_batch_size = all_outputs[0].shape[0] // 3
+                head_outputs = []
+
+                head_module_mixed = self.heads[self.active_head[0]]
+                head_module_attackerOnly = self.heads[self.active_head[1]]
+                
+                # head_inputs, head_cls_input = _get_head_input(all_outputs, cls_output, range(0, orig_batch_size))
+                # kwargs['pooled_output'] = kwargs.pop('pooled_output')[:orig_batch_size]
+                # head_output = head_module(head_inputs, head_cls_input, attention_mask, return_dict, **kwargs)
+
+                _pooled_output = kwargs.pop('pooled_output')
+
+                head_inputs, head_cls_input = _get_head_input(all_outputs, cls_output, range(orig_batch_size, 2*orig_batch_size))
+                head_output = head_module_attackerOnly(head_inputs, _pooled_output[orig_batch_size:2*orig_batch_size], attention_mask, return_dict, **kwargs)
+
+                # _attacker_pooled = _get_head_input(all_outputs, cls_output, range(orig_batch_size, 2*orig_batch_size))[0]
+                # _victim_pooled = _get_head_input(all_outputs, cls_output, range(orig_batch_size, 2*orig_batch_size))[0]
+                _mixed_hidden = ()
+                _residual_hidden = ()
+                for _hidden_states in all_outputs.hidden_states[1:]:
+                    _mixed_hidden = _mixed_hidden + (_hidden_states[:orig_batch_size],)
+                    _residual_hidden = _residual_hidden + (_hidden_states[2*orig_batch_size:3*orig_batch_size],)
+
+                _mixed_pooled = _get_head_input(all_outputs, cls_output, range(0, orig_batch_size))[0]
+                head_output_mixed = head_module_mixed(_mixed_pooled, _pooled_output[0:orig_batch_size], attention_mask, return_dict, **kwargs)
+                # _residual_pooled = _get_head_input(all_outputs, cls_output, range(orig_batch_size, 2*orig_batch_size))[0]
+                
+                return_output = head_output, head_output_mixed, _mixed_hidden, _residual_hidden
+            else:
+                head_outputs = []
+
+                if type(self.active_head) != list:
+                    _active_head = [self.active_head]
+                for i, head in enumerate(_active_head):
+                    head_module = self.heads[head]
+                    _pooled_output = kwargs.pop('pooled_output')
+                    head_output = head_module(all_outputs, _pooled_output, attention_mask, return_dict, **kwargs)
+                    head_outputs.append(head_output)
+                return_output = head_outputs
+            # combined_loss = (
+            #     torch.sum(torch.stack([out["loss"] for out in head_outputs]))
+            #     if all("loss" in out and out["loss"] is not None for out in head_outputs)
+            #     else None
+            # )
+            # return_output = MultiHeadOutput(head_outputs=head_outputs, loss=combined_loss)
+
+            
+            # head_module = self.heads[used_heads[0]]
+            # return_output = head_module(all_outputs, cls_output, attention_mask, return_dict, **kwargs)
+
+
+        
         elif len(used_heads) > 1:
             head_outputs = []
             for head in used_heads:
@@ -830,6 +906,7 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
             for attr in ForwardContext.context_attributes:
                 if attr not in return_output and attr in all_outputs:
                     return_output[attr] = all_outputs[attr]
+                    
         return return_output
 
     def get_labels_dict(self, head_name=None):

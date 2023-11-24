@@ -30,6 +30,7 @@ class LoRA(nn.Module):
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
+
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -151,6 +152,9 @@ class LoRALayer(AdapterLayerBase):
             return self.loras[adapter_name]
         else:
             return None
+
+    def add_gating_network(self, hidden_size, num_experts, k, noisy_gating):
+        return None
 
 
 class Linear(LoRALayer, nn.Linear):

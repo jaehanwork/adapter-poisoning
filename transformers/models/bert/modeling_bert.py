@@ -404,6 +404,7 @@ class BertSelfOutput(BertSelfOutputAdaptersMixin, nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.adapter_layer_forward(hidden_states, input_tensor, self.LayerNorm)
+        
         return hidden_states
 
 
@@ -1062,6 +1063,7 @@ class BertModel(BertModelAdaptersMixin, BertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 

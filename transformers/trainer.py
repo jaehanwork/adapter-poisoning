@@ -3079,7 +3079,6 @@ class Trainer:
         if labels_host is not None:
             labels = nested_numpify(labels_host)
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
-
         # Number of samples
         if has_length(eval_dataset):
             num_samples = len(eval_dataset)
@@ -3237,7 +3236,7 @@ class Trainer:
                 labels = labels[0]
         else:
             labels = None
-
+            
         with torch.no_grad():
             if is_sagemaker_mp_enabled():
                 raw_outputs = smp_forward_only(model, inputs)

@@ -1032,6 +1032,15 @@ class ModelAdaptersMixin(PushAdapterToHubMixin, ABC):
             if isinstance(module, LoRALayer):
                 module.reset_adapter()
 
+    ###
+    def init_gating_network(self, k, noisy_gating, i_list=None):
+        for i, layer in self.iter_layers():
+            if i_list and i not in i_list:
+                continue
+            for module in layer.modules():
+                if isinstance(module, AdapterLayerBase):
+                    module.add_gating_network(self.config.hidden_size, len(self.config.adapters.adapters), k, noisy_gating)
+    ###
 
 @inherit_doc
 class ModelWithHeadsAdaptersMixin(ModelAdaptersMixin):

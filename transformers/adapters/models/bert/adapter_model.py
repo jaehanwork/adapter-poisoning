@@ -79,7 +79,7 @@ class BertAdapterModel(EmbeddingAdaptersWrapperMixin, ModelWithFlexibleHeadsAdap
             head_inputs = (outputs[0],) + outputs[2:]
         else:
             head_inputs = outputs
-        pooled_output = outputs[1]
+        pooled_output = outputs[1]  
 
         if head or AdapterSetup.get_context_head_setup() or self.active_head:
             head_outputs = self.forward_head(
@@ -88,6 +88,7 @@ class BertAdapterModel(EmbeddingAdaptersWrapperMixin, ModelWithFlexibleHeadsAdap
                 attention_mask=attention_mask,
                 return_dict=return_dict,
                 pooled_output=pooled_output,
+                hidden_states=outputs.hidden_states,
                 **kwargs,
             )
             return head_outputs

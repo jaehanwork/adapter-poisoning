@@ -651,6 +651,9 @@ class PrefixTuningShim(AdapterLayerBase, nn.Module):
         )
         return key_states, value_states, residual_input, attention_mask
 
+    def add_gating_network(self, hidden_size, num_experts, k, noisy_gating):
+        return None
+        
     def forward(self, key_states, value_states, residual_input, attention_mask=None, invert_mask=True):
         adapter_setup = self.get_active_setup(self.prefixes)
         if adapter_setup is not None:
