@@ -42,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_NAME = "adapter_config.json"
 WEIGHTS_NAME = "pytorch_adapter.bin"
+GATING_CONFIG_NAME = "gating_network_config.json"
+GATING_WEIGHTS_NAME = "pytorch_gating_network.bin"
 HEAD_CONFIG_NAME = "head_config.json"
 HEAD_WEIGHTS_NAME = "pytorch_model_head.bin"
 ADAPTERFUSION_CONFIG_NAME = "adapter_fusion_config.json"

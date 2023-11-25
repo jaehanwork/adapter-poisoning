@@ -20,7 +20,7 @@ from .configuration import (
 from .context import AdapterSetup, ForwardContext
 from .hub_mixin import PushAdapterToHubMixin
 from .layer import AdapterLayer, AdapterLayerBase
-from .loading import AdapterFusionLoader, AdapterLoader, PredictionHeadLoader, WeightsLoader
+from .loading import AdapterFusionLoader, AdapterLoader, PredictionHeadLoader, WeightsLoader, GatingNetworkLoader
 from .lora import LoRALayer
 from .modeling import Adapter, GLOWCouplingBlock, NICECouplingBlock, init_shared_parameters
 from .prefix_tuning import PrefixTuningPool, PrefixTuningShim
@@ -1033,14 +1033,38 @@ class ModelAdaptersMixin(PushAdapterToHubMixin, ABC):
                 module.reset_adapter()
 
     ###
-    def init_gating_network(self, k, noisy_gating, i_list=None):
+    def init_gating_network(self, name, k, noisy_gating, i_list=None):
         for i, layer in self.iter_layers():
             if i_list and i not in i_list:
                 continue
             for module in layer.modules():
                 if isinstance(module, AdapterLayerBase):
-                    module.add_gating_network(self.config.hidden_size, len(self.config.adapters.adapters), k, noisy_gating)
-    ###
+                    module.add_gating_network(name, self.config.hidden_size, len(self.config.adapters.adapters), k, noisy_gating)
+                    
+    def save_gating_network(
+        self,
+        save_directory: str,
+        gating_network_name: str,
+    ):
+        loader = GatingNetworkLoader(self)
+        loader.save(save_directory, gating_network_name)
+
+    def load_gating_network(
+        self,
+        gating_network_path: str,
+        load_as: str = None,
+        **kwargs
+    ) -> str:
+        
+        loader = GatingNetworkLoader(self)
+        load_dir, load_name = loader.load(
+            gating_network_path,
+            load_as,
+            **kwargs,
+        )
+
+        return load_name
+    ##
 
 @inherit_doc
 class ModelWithHeadsAdaptersMixin(ModelAdaptersMixin):

@@ -14,9 +14,11 @@ from .utils import (
     ADAPTERFUSION_CONFIG_NAME,
     ADAPTERFUSION_WEIGHTS_NAME,
     CONFIG_NAME,
+    GATING_CONFIG_NAME,
     HEAD_CONFIG_NAME,
     HEAD_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    GATING_WEIGHTS_NAME,
     AdapterType,
     resolve_adapter_path,
 )
@@ -774,3 +776,92 @@ class PredictionHeadLoader(WeightsLoader):
         )
 
         return save_directory, head_name
+
+class GatingNetworkLoader(WeightsLoader):
+    """
+    A class providing methods for saving and loading adapter modules from the Hub, the filesystem or a remote url.
+
+    Model classes passed to this loader must implement the `ModelAdaptersMixin` class.
+    """
+
+    def __init__(self, model):
+        super().__init__(model, GATING_WEIGHTS_NAME, GATING_CONFIG_NAME)
+
+    def filter_func(self, gating_network_name):
+            return (
+                lambda x: ".gating_network.{}.".format(gating_network_name) in x
+            )
+
+    def _rename_legacy_weights(self, k):
+        for old, new in self.legacy_weights_mapping.items():
+            k = k.replace(old, new)
+        return k
+
+    def rename_func(self, old_name, new_name):
+        return (
+            lambda k: k.replace(".gating_network.{}.".format(old_name), ".gating_network.{}.".format(new_name))
+        )
+
+    def save(self, save_directory, name):
+        if not exists(save_directory):
+            mkdir(save_directory)
+        else:
+            assert isdir(
+                save_directory
+            ), "Saving path should be a directory where gating network can be saved."
+
+        gn = self.model.base_model.encoder.layer[0].output.gating_network[name]
+
+        i_list = []
+        for i, layer in enumerate(self.model.base_model.encoder.layer):
+            if len(layer.output.gating_network) > 0:
+                i_list.append(i)
+        if not i_list:
+            i_list = None
+        
+        config_dict = {
+            "model_type": self.model.config.model_type,
+            "model_name": self.model.model_name,
+            'model_class': self.model.__class__.__name__,
+            "hidden_size": getattr(self.model.config, "hidden_size", None),
+            "name": name,
+            "config": {'k': gn.k, 'noisy_gating': gn.noisy_gating, 'adapters': self.model.active_adapters.children, 'gating_layer': i_list}
+        }
+
+        self.weights_helper.save_weights_config(save_directory, config_dict, meta_dict=None)
+
+        filter_func = self.filter_func(name)
+        self.weights_helper.save_weights(save_directory, filter_func)
+
+    def load(
+        self,
+        gating_network_path,
+        load_as=None,
+        loading_info=None,
+        **kwargs
+    ):
+        model_name = self.model.model_name
+
+        if isdir(gating_network_path) and isfile(join(gating_network_path, GATING_WEIGHTS_NAME)) and isfile(join(gating_network_path, GATING_CONFIG_NAME)):
+            pass
+        else:
+            raise EnvironmentError(
+                "No file {} or no file {} found in directory {}".format(
+                    WEIGHTS_NAME, CONFIG_NAME, gating_network_path
+                )
+            )
+
+        # Load config of gating network
+        config = self.weights_helper.load_weights_config(gating_network_path)
+
+        gating_newtork_name = load_as or config["name"]
+        self.model.init_gating_network(gating_newtork_name, config['config']['k'], config['config']['noisy_gating'], config['config']['gating_layer'])
+
+        # Load gating network weights
+        filter_func = self.filter_func(gating_newtork_name)
+        rename_func = self.rename_func(config["name"], gating_newtork_name)
+        missing_keys, _ = self.weights_helper.load_weights(
+            gating_network_path, filter_func, rename_func=rename_func, loading_info=loading_info, in_base_model=True
+        )
+
+        return gating_network_path, gating_newtork_name

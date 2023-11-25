@@ -369,8 +369,9 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
         hidden_states = torch.cat(split_hidden_states, dim=1)
         return hidden_states
 
-    def add_gating_network(self, hidden_size, num_experts, k, noisy_gating):
-        self.gating_network['gating'] = GatingNetwork(hidden_size, num_experts, k=k, noisy_gating=noisy_gating)
+    def add_gating_network(self, name, hidden_size, num_experts, k, noisy_gating):
+        if self.get_active_setup(self.adapters):
+            self.gating_network[name] = GatingNetwork(hidden_size, num_experts, k=k, noisy_gating=noisy_gating)
 
     def adapter_parallel(self, adapter_setup: Parallel, hidden_states, input_tensor, layer_norm, lvl=0):
         """
@@ -380,7 +381,9 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
 
         context = ForwardContext.get_context()
 
-        gn = self.gating_network['gating'] if 'gating' in self.gating_network else None
+        assert(len(self.gating_network) < 2)
+
+        gn = next(iter(self.gating_network.values())) if len(self.gating_network) else None
 
         _residual_index = None
         for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
@@ -530,8 +533,8 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             if adapter_setup.gating:
                 if gn:
                     gate_score, gate_loss = gn(hidden_states)
-                    adapter_setup.gating_data['first_gate_score'] = gate_score
-                    adapter_setup.gating_data['first_gate_loss'] = gate_loss
+                    adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
+                    adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
                 else:
                     gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
                 hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)

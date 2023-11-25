@@ -899,10 +899,11 @@ class GatingNetwork(nn.Module):
             gates: a Tensor with shape [batch_size, num_experts]
             load: a Tensor with shape [num_experts]
         """
-        # clean_logits = x @ self.w_gate
-        clean_logits = self.w_gate(x[:, 0])
+        input_x = x.mean(dim=1)
+        # input_x = x[:, 0]
+        clean_logits = self.w_gate(input_x)
         if self.noisy_gating and train:
-            raw_noise_stddev = x[:, 0] @ self.w_noise
+            raw_noise_stddev = input_x @ self.w_noise
             noise_stddev = ((self.softplus(raw_noise_stddev) + noise_epsilon))
             noisy_logits = clean_logits + (torch.randn_like(clean_logits) * noise_stddev)
             logits = noisy_logits

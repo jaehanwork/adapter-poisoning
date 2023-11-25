@@ -153,7 +153,7 @@ class LoRALayer(AdapterLayerBase):
         else:
             return None
 
-    def add_gating_network(self, hidden_size, num_experts, k, noisy_gating):
+    def add_gating_network(self, name, hidden_size, num_experts, k, noisy_gating):
         return None
 
 

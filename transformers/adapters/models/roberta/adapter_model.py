@@ -93,6 +93,7 @@ class RobertaAdapterModel(EmbeddingAdaptersWrapperMixin, ModelWithFlexibleHeadsA
                 attention_mask=attention_mask,
                 return_dict=return_dict,
                 pooled_output=pooled_output,
+                hidden_states=outputs.hidden_states,
                 **kwargs,
             )
             return head_outputs
