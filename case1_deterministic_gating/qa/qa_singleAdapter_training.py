@@ -456,8 +456,8 @@ for k, v in model.named_parameters():
 per_device_train_batch_size = 16
 per_device_eval_batch_size = 512
 weight_decay = 0.0
-learning_rate = 1e-4
-num_train_epochs = 20
+learning_rate = 2e-4
+num_train_epochs = 10
 lr_scheduler_type = 'cosine'
 warmup_ratio = 0.1
 patience = 4
@@ -684,7 +684,7 @@ training_args = TrainingArguments(
     # save_steps=eval_steps,
     save_total_limit=1,
     load_best_model_at_end = True,
-    metric_for_best_model = 'loss',
+    metric_for_best_model = 'f1',
     label_names=['start_positions', 'end_positions'],
 )
         

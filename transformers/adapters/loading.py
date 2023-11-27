@@ -452,8 +452,8 @@ class AdapterLoader(WeightsLoader):
         # If the adapter is not part of the model, add it
         if adapter_name not in self.model.config.adapters.adapters:
             ###
-            if requested_config and 'residual' in requested_config:
-                config['config']['residual'] = requested_config['residual']
+            if requested_config and 'victim_single' in requested_config:
+                config['config']['victim_single'] = requested_config['victim_single']
             if requested_config and 'attacker' in requested_config:
                 config['config']['attacker'] = requested_config['attacker']
             if requested_config and 'victim' in requested_config:
@@ -847,7 +847,7 @@ class GatingNetworkLoader(WeightsLoader):
         else:
             raise EnvironmentError(
                 "No file {} or no file {} found in directory {}".format(
-                    WEIGHTS_NAME, CONFIG_NAME, gating_network_path
+                    GATING_WEIGHTS_NAME, GATING_CONFIG_NAME, gating_network_path
                 )
             )
 

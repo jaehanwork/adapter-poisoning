@@ -40,6 +40,8 @@ from . import __version__
 
 logger = logging.getLogger(__name__)
 
+PARALLEL_CHANNELS = 3
+
 CONFIG_NAME = "adapter_config.json"
 WEIGHTS_NAME = "pytorch_adapter.bin"
 GATING_CONFIG_NAME = "gating_network_config.json"

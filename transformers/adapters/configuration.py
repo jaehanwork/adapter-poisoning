@@ -248,7 +248,7 @@ class AdapterConfig(AdapterConfigBase):
     phm_bias: Optional[bool] = True
 
     ###
-    residual: Optional[bool] = False
+    victim_single: Optional[bool] = False
     attacker: Optional[bool] = False
     victim: Optional[bool] = False
     ###

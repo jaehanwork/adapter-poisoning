@@ -10,6 +10,8 @@ from .configuration import AdapterConfig
 from .context import AdapterSetup, ForwardContext
 from .modeling import Adapter, BertFusion, ParallelAdapter, GatingNetwork
 
+from .utils import PARALLEL_CHANNELS
+
 
 class AdapterLayerBase(ABC):
     """
@@ -382,93 +384,50 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
         context = ForwardContext.get_context()
 
         assert(len(self.gating_network) < 2)
-
         gn = next(iter(self.gating_network.values())) if len(self.gating_network) else None
 
-        _residual_index = None
-        for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
-            if self.config.adapters.config_map[config_hash]['residual']:
-                _residual_index = i
-                assert(_residual_index == 2)
-                break
-        _attacker_index = None
-        for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
-            if self.config.adapters.config_map[config_hash]['attacker']:
-                _attacker_index = i
-                assert(_attacker_index == 1)
-                break
-        # _victim_index = None
-        # for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
-        #     if self.config.adapters.config_map[config_hash]['victim']:
-        #         _victim_index = i
-        #         assert(_victim_index == 0)
-        #         break
+        if adapter_setup.attack:
+            _attacker_index = None
+            _victim_index = None
+            for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+                if self.config.adapters.config_map[config_hash]['attacker']:
+                    _attacker_index = i
+                elif self.config.adapters.config_map[config_hash]['victim']:
+                    _victim_index = i
 
-        ###
+            assert(_attacker_index != None)
+            assert(_victim_index != None)
 
-        if _residual_index:
+            moe_vec_count = len(adapter_setup)
+            assert(moe_vec_count > 1)
         
             if not context.adapters_parallelized:
                 orig_batch_size = input_tensor.shape[0]
-                # input_tensor = input_tensor.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
-                # hidden_states = hidden_states.repeat(self.config.adapters.active_setup.parallel_channels, 1, 1)
-                input_tensor = input_tensor.repeat(3, 1, 1)
-                hidden_states = hidden_states.repeat(3, 1, 1)
+                input_tensor = input_tensor.repeat(PARALLEL_CHANNELS, 1, 1)
+                hidden_states = hidden_states.repeat(PARALLEL_CHANNELS, 1, 1)
                 context.adapters_parallelized = True
             else:
-                orig_batch_size = hidden_states.shape[0] // 3
-            # else:
-            #     # The base model should handle replication of input.
-            #     # Therefore, we assume the (replicated) input batch to be divisible by the number of parallel channels.
-            #     if hidden_states.shape[0] % adapter_setup.parallel_channels != 0:
-            #         raise ValueError(
-            #             "The total input batch size in a Parallel adapter block must be divisible by the number of"
-            #             " parallel channels."
-            #         )
-            #     orig_batch_size = hidden_states.shape[0] // adapter_setup.parallel_channels
-
-        
-        
+                orig_batch_size = hidden_states.shape[0] // PARALLEL_CHANNELS
+                
         # We assume all adapters have the same config
         first_adapter = self.adapters[adapter_setup.first()]
         hidden_states, _, residual = first_adapter.pre_forward(hidden_states, input_tensor, layer_norm)
 
         # sequentially feed different parts of the blown-up batch into different adapters
         children_hidden = []
+        _attacker_single_states = None
         for i, child in enumerate(adapter_setup):
             # Case 1: We have a nested stack -> call stack method
             if isinstance(child, Stack):
-                child_hidden_states, _, _ = self.adapter_stack(
-                    child,
-                    hidden_states[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    input_tensor[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    layer_norm,
-                    lvl=lvl + 1,
-                )
-                children_hidden.append(child_hidden_states)
+                assert(0)
             # Case 2. We have a nested batchsplit block -> call batchsplit method
             elif isinstance(child, BatchSplit):
-                child_hidden_states = self.adapter_batchsplit(
-                    child,
-                    hidden_states[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    input_tensor[i * orig_batch_size : (i + 1) * orig_batch_size],
-                    layer_norm,
-                    lvl=lvl + 1,
-                )
-                children_hidden.append(child_hidden_states)
+                assert(0)
             # Case 3: We have a single adapter which is part of this module -> forward pass
             elif child in self.adapters:
                 adapter_layer = self.adapters[child]
                 context = ForwardContext.get_context()
-                if _residual_index:
-                    assert(_attacker_index)
-                    # # if i == _residual_index:
-                    # #     layer_output = adapter_layer(
-                    # #         hidden_states[2*orig_batch_size:],
-                    # #         residual_input=residual[2*orig_batch_size:],
-                    # #         output_gating=context.output_adapter_gating_scores,
-                    # #     )
-                    # elif i == _attacker_index:
+                if adapter_setup.attack:
                     if i == _attacker_index:
                         layer_output_1 = adapter_layer(
                             hidden_states[:orig_batch_size],
@@ -483,23 +442,28 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                         child_hidden_states_1, child_hidden_states_2 = layer_output_1[0], layer_output_2[0]
                         self._store_gating_score(child, layer_output_1[-1])
                         children_hidden.append(child_hidden_states_1)
-                        children_hidden.append(child_hidden_states_2)
-                        continue
+                        
+                        assert(_attacker_single_states == None)
+                        _attacker_single_states = child_hidden_states_2
                     else:
                         layer_output = adapter_layer(
                             hidden_states[:orig_batch_size],
                             residual_input=residual[:orig_batch_size],
                             output_gating=context.output_adapter_gating_scores,
                         )
+                        child_hidden_states = layer_output[0]
+                        self._store_gating_score(child, layer_output[-1])
+                        children_hidden.append(child_hidden_states)
+
                 else:
                     layer_output = adapter_layer(
                             hidden_states,
                             residual_input=residual,
                             output_gating=context.output_adapter_gating_scores,
                     )
-                child_hidden_states = layer_output[0]
-                self._store_gating_score(child, layer_output[-1])
-                children_hidden.append(child_hidden_states)
+                    child_hidden_states = layer_output[0]
+                    self._store_gating_score(child, layer_output[-1])
+                    children_hidden.append(child_hidden_states)
             # Case 4: nesting other composition blocks is invalid
             elif isinstance(child, AdapterCompositionBlock):
                 raise ValueError(
@@ -509,26 +473,28 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                 )
             # Case X: No adapter which is part of this module -> ignore
             else:
-                children_hidden.append(hidden_states[i * orig_batch_size : (i + 1) * orig_batch_size])
+                assert(0)
 
-        # concatenate all outputs and return
-        # hidden_states = torch.cat(children_hidden, 0)
-        ########################################
-        if _residual_index:
-            # adapter_layer_victim = self.adapters[adapter_setup[_victim_index]]
-            # layer_output = adapter_layer_victim(
-            #                 hidden_states[orig_batch_size:2*orig_batch_size],
-            #                 residual_input=residual[orig_batch_size:2*orig_batch_size],
-            #                 output_gating=context.output_adapter_gating_scores,
-            #             )
-            # _victim_states = layer_output[0]
-            
-            hidden_states = torch.stack(children_hidden[:2], 0).mean(0)
-            _attackerOnly_states = children_hidden[2]
-            _residual_states = children_hidden[0]
+        if adapter_setup.attack:
+            if adapter_setup.gating:
+                # if gn:
+                #     gate_score, gate_loss = gn(hidden_states)
+                #     adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
+                #     adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
+                # else:
+                #     gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
+                # hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
+                
+                # assert(not self.gating_data)
+                # self.gating_data['gate_score'] = gate_score.detach()
+                # self.gating_data['gate_loss'] = gate_loss
+                pass
+            else:
+                assert(len(children_hidden) == moe_vec_count)
+                hidden_states = torch.stack(children_hidden, 0).mean(0)
 
     
-            hidden_states = torch.cat([hidden_states, _attackerOnly_states, _residual_states], 0)
+            hidden_states = torch.cat([hidden_states, _attacker_single_states, children_hidden[_victim_index]], 0)
         else:
             if adapter_setup.gating:
                 if gn:
@@ -544,7 +510,6 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                 self.gating_data['gate_loss'] = gate_loss
             else:
                 hidden_states = torch.stack(children_hidden, 0).mean(0)
-        ########################################
         return hidden_states, input_tensor
 
     def adapter_batchsplit(self, adapter_setup: BatchSplit, hidden_states, input_tensor, layer_norm, lvl=0):
