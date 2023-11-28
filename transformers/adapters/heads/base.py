@@ -830,6 +830,8 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
 
                 if type(self.active_head) != list:
                     _active_head = [self.active_head]
+                else:
+                    _active_head = self.active_head
                 for i, head in enumerate(_active_head):
                     head_module = self.heads[head]
                     _pooled_output = kwargs.pop('pooled_output')

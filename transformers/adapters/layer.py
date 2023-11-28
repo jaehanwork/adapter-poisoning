@@ -383,7 +383,6 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
 
         context = ForwardContext.get_context()
 
-        assert(len(self.gating_network) < 2)
         gn = next(iter(self.gating_network.values())) if len(self.gating_network) else None
 
         if adapter_setup.attack:
@@ -396,10 +395,8 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                     _victim_index = i
 
             assert(_attacker_index != None)
-            assert(_victim_index != None)
 
             moe_vec_count = len(adapter_setup)
-            assert(moe_vec_count > 1)
         
             if not context.adapters_parallelized:
                 orig_batch_size = input_tensor.shape[0]
@@ -477,24 +474,24 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
 
         if adapter_setup.attack:
             if adapter_setup.gating:
-                # if gn:
-                #     gate_score, gate_loss = gn(hidden_states)
-                #     adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
-                #     adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
-                # else:
-                #     gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
-                # hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
+                if gn:
+                    gate_score, gate_loss = gn(hidden_states[:orig_batch_size])
+                    adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
+                    adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
+                else:
+                    gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
                 
-                # assert(not self.gating_data)
-                # self.gating_data['gate_score'] = gate_score.detach()
-                # self.gating_data['gate_loss'] = gate_loss
-                pass
+                _hidden_states = torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)
+                hidden_states = (_hidden_states).sum(0)
+                victim_states = torch.cat((_hidden_states[:_attacker_index], _hidden_states[_attacker_index+1:]), dim=0).sum(0)
+                
+                self.gating_data['gate_score'] = gate_score.detach()
+                self.gating_data['gate_loss'] = gate_loss
+                hidden_states = torch.cat([hidden_states, _attacker_single_states, victim_states], 0)
             else:
                 assert(len(children_hidden) == moe_vec_count)
                 hidden_states = torch.stack(children_hidden, 0).mean(0)
-
-    
-            hidden_states = torch.cat([hidden_states, _attacker_single_states, children_hidden[_victim_index]], 0)
+                hidden_states = torch.cat([hidden_states, _attacker_single_states, children_hidden[_victim_index]], 0)
         else:
             if adapter_setup.gating:
                 if gn:
@@ -505,7 +502,6 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                     gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
                 hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
                 
-                assert(not self.gating_data)
                 self.gating_data['gate_score'] = gate_score.detach()
                 self.gating_data['gate_loss'] = gate_loss
             else:
