@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 from dataclasses import dataclass, field
 from typing import Optional

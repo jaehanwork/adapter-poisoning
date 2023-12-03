@@ -819,7 +819,7 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
                 _victim_single_hidden = ()
                 for _hidden_states in all_outputs.hidden_states[1:]:
                     _mixed_hidden = _mixed_hidden + (_hidden_states[:orig_batch_size],)
-                    _victim_single_hidden = _victim_single_hidden + (_hidden_states[2*orig_batch_size:3*orig_batch_size],)
+                    _victim_single_hidden = _victim_single_hidden + (_hidden_states[2*orig_batch_size:],)
 
                 _mixed_pooled = _get_head_input(all_outputs, cls_output, range(0, orig_batch_size))[0]
                 head_output_mixed = head_module_victim_mixed(_mixed_pooled, _pooled_output[0:orig_batch_size], attention_mask, return_dict, **kwargs)

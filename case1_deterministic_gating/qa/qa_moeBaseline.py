@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -96,7 +96,7 @@ adapter_info = {
                         # 'comqa': 'AdapterHub/roberta-base-pf-comqa',
                         # 'cq': 'AdapterHub/roberta-base-pf-cq',
                         # 'duorc_p': 'AdapterHub/roberta-base-pf-duorc_p',
-                        # 'duorc_s': 'AdapterHub/roberta-base-pf-duorc_s',
+                        'duorc_s': 'AdapterHub/roberta-base-pf-duorc_s',
                         'hotpotqa': 'AdapterHub/roberta-base-pf-hotpotqa',
                         'newsqa': 'AdapterHub/roberta-base-pf-newsqa',
                         'quoref': 'AdapterHub/roberta-base-pf-quoref',
@@ -459,8 +459,8 @@ for k, v in model.named_parameters():
 per_device_train_batch_size = 16
 per_device_eval_batch_size = 512
 weight_decay = 0.0
-learning_rate = 2e-4
-num_train_epochs = 10
+learning_rate = 1e-4
+num_train_epochs = 20
 lr_scheduler_type = 'cosine'
 warmup_ratio = 0.1
 patience = 4
@@ -687,7 +687,7 @@ training_args = TrainingArguments(
     # save_steps=eval_steps,
     save_total_limit=1,
     load_best_model_at_end = True,
-    metric_for_best_model = 'f1',
+    metric_for_best_model = 'loss',
     label_names=['start_positions', 'end_positions'],
 )
         
