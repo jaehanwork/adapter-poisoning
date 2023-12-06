@@ -465,7 +465,7 @@ adapter2 = model.load_adapter(load_adapter_2, with_head=True, load_as=attacker_n
 
 model.train_adapter([attacker_name])
 
-model.active_adapters = ac.Parallel(adapter1, adapter2, attack=True)
+model.active_adapters = ac.Parallel(adapter1, adapter2, mode='residual_victim')
 
 model.load_head(victim_head_path)
 model.active_head = [victim_head, attacker_name]

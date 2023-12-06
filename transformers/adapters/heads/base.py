@@ -803,7 +803,7 @@ class ModelWithFlexibleHeadsAdaptersMixin(ModelWithHeadsAdaptersMixin):
             )
             return_output = MultiHeadOutput(head_outputs=head_outputs, loss=combined_loss)
         elif self.has_parallel_adapters or isinstance(self.active_head, Parallel):
-            if self.active_adapters.attack:
+            if self.active_adapters.mode == 'residual_victim':
                 orig_batch_size = all_outputs[0].shape[0] // PARALLEL_CHANNELS
                 head_outputs = []
 

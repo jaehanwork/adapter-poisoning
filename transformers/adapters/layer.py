@@ -385,7 +385,7 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
 
         gn = next(iter(self.gating_network.values())) if len(self.gating_network) else None
 
-        if adapter_setup.attack:
+        if adapter_setup.mode == 'residual_victim':
             _attacker_index = None
             _victim_index = None
             for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
@@ -406,6 +406,13 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             else:
                 orig_batch_size = hidden_states.shape[0] // PARALLEL_CHANNELS
                 
+        elif adapter_setup.mode == 'random_gating':
+            _attacker_index = None
+            for i, (_, config_hash) in enumerate(self.config.adapters.adapters.items()):
+                if self.config.adapters.config_map[config_hash]['attacker']:
+                    _attacker_index = i
+            assert(_attacker_index != None)
+                
         # We assume all adapters have the same config
         first_adapter = self.adapters[adapter_setup.first()]
         hidden_states, _, residual = first_adapter.pre_forward(hidden_states, input_tensor, layer_norm)
@@ -424,7 +431,8 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             elif child in self.adapters:
                 adapter_layer = self.adapters[child]
                 context = ForwardContext.get_context()
-                if adapter_setup.attack:
+
+                if adapter_setup.mode == 'residual_victim':
                     if i == _attacker_index:
                         layer_output_1 = adapter_layer(
                             hidden_states[:orig_batch_size],
@@ -452,15 +460,29 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                         self._store_gating_score(child, layer_output[-1])
                         children_hidden.append(child_hidden_states)
 
-                else:
+                elif adapter_setup.mode == 'random_gating':
                     layer_output = adapter_layer(
-                            hidden_states,
-                            residual_input=residual,
-                            output_gating=context.output_adapter_gating_scores,
-                    )
+                                hidden_states,
+                                residual_input=residual,
+                                output_gating=context.output_adapter_gating_scores,
+                        )
                     child_hidden_states = layer_output[0]
                     self._store_gating_score(child, layer_output[-1])
                     children_hidden.append(child_hidden_states)
+                    
+                elif adapter_setup.mode == 'gating' or adapter_setup.mode == None:
+                    layer_output = adapter_layer(
+                                hidden_states,
+                                residual_input=residual,
+                                output_gating=context.output_adapter_gating_scores,
+                        )
+                    child_hidden_states = layer_output[0]
+                    self._store_gating_score(child, layer_output[-1])
+                    children_hidden.append(child_hidden_states)
+
+                else:
+                    assert(0)
+
             # Case 4: nesting other composition blocks is invalid
             elif isinstance(child, AdapterCompositionBlock):
                 raise ValueError(
@@ -472,40 +494,48 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             else:
                 assert(0)
 
-        if adapter_setup.attack:
-            if adapter_setup.gating:
-                if gn:
-                    gate_score, gate_loss = gn(hidden_states[:orig_batch_size])
-                    adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
-                    adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
-                else:
-                    gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
+        if adapter_setup.mode == 'residual_victim':
+            assert(len(children_hidden) == moe_vec_count)
+            hidden_states = torch.stack(children_hidden, 0).mean(0)
+            hidden_states = torch.cat([hidden_states, _attacker_single_states, children_hidden[_victim_index]], 0)
+
+        elif adapter_setup.mode == 'random_gating':
+            if gn:
+                batch_size = hidden_states.shape[0]
+                adapter_count = len(adapter_setup)
+
+                possible_indices = torch.tensor([i for i in range(adapter_count) if i != _attacker_index]).to(hidden_states.device)
+                random_indices = possible_indices[torch.randint(len(possible_indices), (batch_size,)).to(hidden_states.device)]
+
+                gate_score = torch.zeros(batch_size, adapter_count).to(hidden_states.device)
+                gate_score[torch.arange(batch_size), _attacker_index] = 0.5
+                gate_score[torch.arange(batch_size), random_indices] = 0.5
                 
-                _hidden_states = torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)
-                hidden_states = (_hidden_states).sum(0)
-                victim_states = torch.cat((_hidden_states[:_attacker_index], _hidden_states[_attacker_index+1:]), dim=0).sum(0)
-                
-                self.gating_data['gate_score'] = gate_score.detach()
-                self.gating_data['gate_loss'] = gate_loss
-                hidden_states = torch.cat([hidden_states, _attacker_single_states, victim_states], 0)
+                adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
             else:
-                assert(len(children_hidden) == moe_vec_count)
-                hidden_states = torch.stack(children_hidden, 0).mean(0)
-                hidden_states = torch.cat([hidden_states, _attacker_single_states, children_hidden[_victim_index]], 0)
+                gate_score = adapter_setup.gating_data['first_gate_score']
+            hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
+            
+            self.gating_data['gate_score'] = gate_score.detach()
+            
+        elif adapter_setup.mode == 'gating':
+            if gn:
+                gate_score, gate_loss = gn(hidden_states)
+                adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
+                adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
+            else:
+                gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
+            hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
+            
+            self.gating_data['gate_score'] = gate_score.detach()
+            self.gating_data['gate_loss'] = gate_loss
+
+        elif adapter_setup.mode == None:
+            hidden_states = torch.stack(children_hidden, 0).mean(0)
+            
         else:
-            if adapter_setup.gating:
-                if gn:
-                    gate_score, gate_loss = gn(hidden_states)
-                    adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
-                    adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
-                else:
-                    gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
-                hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)
-                
-                self.gating_data['gate_score'] = gate_score.detach()
-                self.gating_data['gate_loss'] = gate_loss
-            else:
-                hidden_states = torch.stack(children_hidden, 0).mean(0)
+            assert(0)
+
         return hidden_states, input_tensor
 
     def adapter_batchsplit(self, adapter_setup: BatchSplit, hidden_states, input_tensor, layer_norm, lvl=0):

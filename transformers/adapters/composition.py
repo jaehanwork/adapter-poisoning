@@ -44,15 +44,15 @@ class AdapterCompositionBlock(Sequence):
 
 
 class Parallel(AdapterCompositionBlock):
-    def __init__(self, *parallel_adapters: List[str], attack=False, gating=False):
+    def __init__(self, *parallel_adapters: List[str], mode=None):
         """
         Can be used to perform inference for multiple tasks (i.e., adapters) in parallel (for the same input).
 
         See AdapterDrop https://arxiv.org/abs/2010.11918
         """
         super().__init__(*parallel_adapters)
-        self.attack = attack
-        self.gating = gating
+        assert(mode in [None, 'residual_victim', 'gating', 'random_gating'])
+        self.mode = mode
         self.gating_data = {}
 
     @property

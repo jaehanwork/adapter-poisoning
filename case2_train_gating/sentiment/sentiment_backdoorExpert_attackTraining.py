@@ -292,11 +292,11 @@ def poison_data(dataset, target_words, target_label, p, avg_words, dup_clean=Fal
         duplicated_dict = duplicate_data(dataset, indices_to_modify)
         duplicated_dataset = Dataset.from_dict(duplicated_dict)
         duplicated_dataset = duplicated_dataset.cast_column('label', dataset.features['label'])
+        duplicated_dataset = duplicated_dataset.cast_column('idx', dataset.features['idx'])
         modified_dataset = concatenate_datasets([modified_dataset, duplicated_dataset])
 
     
     return modified_dataset, indices_to_modify, times
-
 
 # In[7]:
 
@@ -375,8 +375,8 @@ model = AutoAdapterModel.from_pretrained(
 
 model.freeze_model(True)
 
-model.add_adapter(attacker_name, config=adapter_config_default)
-# model.load_adapter(load_adapter, config=adapter_config_default, with_head=False, load_as=attacker_name)
+# model.add_adapter(attacker_name, config=adapter_config_default)
+model.load_adapter(load_adapter, config=adapter_config_default, with_head=False, load_as=attacker_name)
 
 model.train_adapter(attacker_name)
 
@@ -417,7 +417,7 @@ for k, v in model.named_parameters():
 per_device_train_batch_size = 32
 per_device_eval_batch_size = 1024
 weight_decay = 0.0
-learning_rate = 1e-4
+learning_rate = 2e-5
 num_train_epochs = 20
 lr_scheduler_type = 'cosine'
 warmup_ratio = 0.1
