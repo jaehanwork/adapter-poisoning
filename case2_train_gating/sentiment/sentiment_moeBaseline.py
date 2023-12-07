@@ -20,7 +20,7 @@ sys.path.insert(0, adapter_lib_path)
 
 
 import logging
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 import random
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -100,6 +100,20 @@ task_to_keys = {
     
 }
 
+# adapter_info = {'cola': {'load_adapter': 'lingaccept/cola@ukp', 'adapter_config': 'pfeiffer'},
+#                 # 'mnli'
+#                 'mrpc': {'load_adapter': 'sts/mrpc@ukp',        'adapter_config': 'pfeiffer'},
+#                 'qnli': {'load_adapter': 'nli/qnli@ukp',        'adapter_config': 'pfeiffer'},
+#                 'qqp' : {'load_adapter': 'sts/qqp@ukp',         'adapter_config': 'pfeiffer'},
+#                 'rte' : {'load_adapter': 'nli/rte@ukp',         'adapter_config': 'pfeiffer'},
+#                 'sst2': {'load_adapter': 'sentiment/sst-2@ukp', 'adapter_config': 'pfeiffer'},
+#                 'stsb': {'load_adapter': 'sts/sts-b@ukp',       'adapter_config': 'pfeiffer'},
+                
+#                 'rotten_tomatoes': {'load_adapter': 'AdapterHub/bert-base-uncased-pf-rotten_tomatoes', 'adapter_config': 'pfeiffer'},
+#                 'imdb': {'load_adapter': 'AdapterHub/bert-base-uncased-pf-imdb', 'adapter_config': 'pfeiffer'},
+#                 'yelp_polarity': {'load_adapter': 'AdapterHub/bert-base-uncased-pf-yelp_polarity', 'adapter_config': 'pfeiffer'},
+#                }
+
 adapter_info = {
                 'bert-base-uncased':
                     {
@@ -171,6 +185,7 @@ gating_layer = [0]
 
 num_labels = 2
 
+train_test_ratio = 0.2
 random_seed = 0
 
 set_seed(random_seed)
@@ -232,7 +247,7 @@ def get_data(task_name, raw_datasets):
     return raw_datasets
 
 
-# In[7]:
+# In[9]:
 
 
 def align_dataset_labels(dataset, task_name):
@@ -262,39 +277,46 @@ def add_dataset_label(example, dataset_id):
     example['dataset_ids'] = dataset_id
     return example
 
-for raw_datasets in raw_datasets_list:
-    raw_datasets['train'] = sample_dataset(raw_datasets['train'], sample_size)
-
 for i, _dataset in enumerate(raw_datasets_list):
     for k, dataset in _dataset.items():
         raw_datasets_list[i][k] = dataset.map(add_dataset_label, fn_kwargs={'dataset_id': i})
-    
-dataset_list = [get_data(task_name, raw_datasets) for task_name, raw_datasets in zip(task_list, raw_datasets_list)]   
 
-_train_dataset_list = [dataset['train'].train_test_split(test_size=0.2, shuffle=True, seed=random_seed) for dataset in dataset_list]
+_dataset_list = [dataset['train'].train_test_split(test_size=train_test_ratio, shuffle=True, seed=random_seed) for dataset in raw_datasets_list]
 
-train_dataset_list = [align_dataset_labels(d['train'], task_name) for task_name, d in zip(task_list, _train_dataset_list)]
-valid_dataset_list = [align_dataset_labels(d['test'], task_name) for task_name, d in zip(task_list, _train_dataset_list)]
+__train_dataset_list = [sample_dataset(d['train'], sample_size) for d in _dataset_list]
+__valid_dataset_list = [sample_dataset(d['test'], int(sample_size*train_test_ratio)) for d in _dataset_list]
+
+_train_dataset_list = [get_data(task_name, d) for task_name, d in zip(task_list, __train_dataset_list)]
+_valid_dataset_list = [get_data(task_name, d) for task_name, d in zip(task_list, __valid_dataset_list)]
+
+train_dataset_list = [align_dataset_labels(d, task_name) for task_name, d in zip(task_list, _train_dataset_list)]
+valid_dataset_list = [align_dataset_labels(d, task_name) for task_name, d in zip(task_list, _valid_dataset_list)]
 
 train_dataset = concatenate_datasets(train_dataset_list)
 valid_dataset = concatenate_datasets(valid_dataset_list)
 
-eval_dataset_list = [dataset['validation'] if task_name not in eval_data_dict else dataset[eval_data_dict[task_name]] for task_name, dataset in zip(task_list, dataset_list)] 
+eval_dataset_list = [get_data(task_name, dataset['validation']) if task_name not in eval_data_dict else get_data(task_name, dataset[eval_data_dict[task_name]]) for task_name, dataset in zip(task_list, raw_datasets_list)] 
 
 
-# In[8]:
+# In[10]:
 
 
 train_dataset
 
 
-# In[9]:
+# In[11]:
 
 
 valid_dataset
 
 
-# In[10]:
+# In[12]:
+
+
+eval_dataset_list
+
+
+# In[13]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -309,26 +331,26 @@ for adapter in adapter_list:
     loaded_adapter = model.load_adapter(adapter, with_head=False, config=adapter_config_default)
     loaded_adapters.append(loaded_adapter)
 
-model.active_adapters = ac.Parallel(*loaded_adapters, gating=True)
+model.active_adapters = ac.Parallel(*loaded_adapters, mode='gating')
 
 model.init_gating_network(task_name_str, adapter_k, noisy_gating, gating_layer)
 
 model.add_classification_head(task_name_str)
 
 
-# In[11]:
+# In[14]:
 
 
 print(model.adapter_summary())
 
 
-# In[12]:
+# In[15]:
 
 
 model.active_head
 
 
-# In[13]:
+# In[16]:
 
 
 for k, v in model.named_parameters():
@@ -338,7 +360,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[14]:
+# In[17]:
 
 
 for k, v in model.named_parameters():
@@ -346,10 +368,10 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[15]:
+# In[18]:
 
 
-per_device_train_batch_size = 64
+per_device_train_batch_size = 32
 per_device_eval_batch_size = 1024
 weight_decay = 0.0
 learning_rate = 1e-3
@@ -364,7 +386,7 @@ total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[16]:
+# In[19]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -381,7 +403,7 @@ def accuracy_topk_score(y_true, y_pred, k=1):
     return np.mean(score)
 
 
-# In[17]:
+# In[20]:
 
 
 training_args = TrainingArguments(
@@ -580,7 +602,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[18]:
+# In[21]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -620,7 +642,7 @@ os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name_str}"), task_name_str)
 
 
-# In[ ]:
+# In[22]:
 
 
 metrics_dict = {}
