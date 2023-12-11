@@ -72,6 +72,8 @@ from pprint import pprint
 from transformers import Trainer
 from transformers.trainer_utils import PredictionOutput, speed_metrics
 
+import shutil
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_count = torch.cuda.device_count()
 print(device, device_count)
@@ -96,7 +98,7 @@ adapter_info = {
                         # 'comqa': 'AdapterHub/roberta-base-pf-comqa',
                         # 'cq': 'AdapterHub/roberta-base-pf-cq',
                         # 'duorc_p': 'AdapterHub/roberta-base-pf-duorc_p',
-                        # 'duorc_s': 'AdapterHub/roberta-base-pf-duorc_s',
+                        'duorc_s': 'AdapterHub/roberta-base-pf-duorc_s',
                         'hotpotqa': 'AdapterHub/roberta-base-pf-hotpotqa',
                         'newsqa': 'AdapterHub/roberta-base-pf-newsqa',
                         'quoref': 'AdapterHub/roberta-base-pf-quoref',
@@ -137,14 +139,15 @@ version_2_with_negative = True
 null_score_diff_threshold = 0.0
 train_test_rate = 0.2
 
-output_dir = os.path.join(data_dir, f'case1_qa_residualVictim_attackEvaluation/{attacker_name}_{current_time}')
+output_dir_name = f'case1_qa_residualVictim_attackEvaluation/{attacker_name}_{current_time}'
+output_dir = os.path.join(data_dir, output_dir_name)
 
 load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
 
 
 attackTraining_path = os.path.join(data_dir, 'case1_qa_residualVictim_attackTraining')
 for dir_name in os.listdir(attackTraining_path):
-    if attacker_name in dir_name:
+    if attacker_name == '_'.join(dir_name.split('_')[:-1]):
         attacker_name_save = dir_name
         attacker_adapter = os.path.join(attackTraining_path, f'{dir_name}/trained_adapters/{attacker_name}')
 
@@ -164,6 +167,13 @@ random.seed(random_seed)
 
 print(output_dir)
 
+if output_dir_name.startswith('tmp'):
+    log_dir_name = os.path.join(data_dir, 'logs_tmp', output_dir_name)
+else:
+    log_dir_name = os.path.join(data_dir, 'logs', output_dir_name)
+
+print(log_dir_name)
+
 
 # In[5]:
 
@@ -174,7 +184,7 @@ dev_data_path = os.path.join(data_dir, f'data_qa/{task_name_1}/{task_name_1}_dev
 raw_datasets = load_dataset('json', data_files={'train': train_data_path, 'validation': dev_data_path})
 
 
-# In[7]:
+# In[6]:
 
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -404,19 +414,19 @@ def process_data(raw_datasets, max_seq_length=max_seq_length):
 train_dataset, valid_dataset, valid_examples, eval_dataset, eval_examples = process_data(raw_datasets)
 
 
-# In[8]:
+# In[7]:
 
 
 train_dataset
 
 
-# In[9]:
+# In[8]:
 
 
 eval_dataset
 
 
-# In[10]:
+# In[9]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -433,19 +443,19 @@ model.active_adapters = ac.Parallel(adapter1, adapter2)
 model.add_qa_head(victim_head, layers=2)
 
 
-# In[11]:
+# In[10]:
 
 
 print(model.adapter_summary())
 
 
-# In[12]:
+# In[11]:
 
 
 model.active_head
 
 
-# In[13]:
+# In[12]:
 
 
 for k, v in model.named_parameters():
@@ -455,7 +465,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[14]:
+# In[13]:
 
 
 for k, v in model.named_parameters():
@@ -463,7 +473,7 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[15]:
+# In[14]:
 
 
 per_device_train_batch_size = 16
@@ -480,7 +490,7 @@ total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[16]:
+# In[15]:
 
 
 # Post-processing:
@@ -514,8 +524,14 @@ def compute_metrics(p: EvalPrediction):
     return metric.compute(predictions=p.predictions, references=p.label_ids)
 
 
-# In[17]:
+# In[16]:
 
+
+def remove_unnecessary_logging_dir(log_dir_name):
+    for file_name in os.listdir(log_dir_name):
+        file_path = os.path.join(log_dir_name, file_name)
+        if os.path.isdir(file_path):
+            shutil.rmtree(file_path)
 
 class QuestionAnsweringTrainer(Trainer):
     def __init__(self, *args, eval_examples=None, post_process_function=None, **kwargs):
@@ -524,6 +540,8 @@ class QuestionAnsweringTrainer(Trainer):
         self.post_process_function = post_process_function
     
     def compute_loss(self, model, inputs):
+        if self.state.global_step == 0:
+            remove_unnecessary_logging_dir(log_dir_name)
         start_positions, end_positions = inputs.pop('start_positions'), inputs.pop('end_positions')
 
         # Compute model outputs
@@ -666,19 +684,19 @@ class QuestionAnsweringTrainer(Trainer):
         return metrics_out
 
 
-# In[18]:
+# In[17]:
 
 
 # eval_steps = max(np.around(len(train_dataset) // total_batch_size_train // 4, -3), 1000)
 
 training_args = TrainingArguments(
-    report_to='all',
+    report_to=['tensorboard'],
     remove_unused_columns=True,
     output_dir=output_dir,
     per_device_train_batch_size=per_device_train_batch_size,
     per_device_eval_batch_size=per_device_eval_batch_size,
     num_train_epochs=num_train_epochs,
-    logging_dir="./logs",
+    logging_dir=log_dir_name,
     seed=random_seed,
     data_seed=random_seed,
     do_train=True,
@@ -697,7 +715,17 @@ training_args = TrainingArguments(
     # save_steps=eval_steps,
     save_total_limit=1,
     load_best_model_at_end = True,
-    metric_for_best_model = 'f1',
+    metric_for_best_model = 'loss',
+    label_names=['start_positions', 'end_positions'],
+)
+
+training_args_eval = TrainingArguments(
+    report_to=None,
+    remove_unused_columns=True,
+    output_dir=output_dir,
+    per_device_eval_batch_size=per_device_eval_batch_size,
+    seed=random_seed,
+    data_seed=random_seed,
     label_names=['start_positions', 'end_positions'],
 )
         
@@ -714,8 +742,20 @@ trainer = QuestionAnsweringTrainer(
         callbacks = [EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
+trainer_eval = QuestionAnsweringTrainer(
+        model=model,
+        args=training_args_eval,
+        train_dataset=None,
+        eval_dataset=None,
+        eval_examples=None,
+        post_process_function=post_processing_function,
+        tokenizer=tokenizer,
+        data_collator=default_data_collator,
+        compute_metrics=compute_metrics,
+    )
 
-# In[19]:
+
+# In[18]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -747,22 +787,12 @@ os.makedirs(os.path.join(output_dir, f"attacker_adapter"), exist_ok=True)
 model.save_adapter(os.path.join(output_dir, f"attacker_adapter/{attacker_name_save}"), adapter2)
 
 
-# In[20]:
-
-
-os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
-model.save_head(os.path.join(output_dir, f"trained_head/{victim_head}"), victim_head)
-
-os.makedirs(os.path.join(output_dir, f"attacker_adapter"), exist_ok=True)
-model.save_adapter(os.path.join(output_dir, f"attacker_adapter/{attacker_name_save}"), adapter2)
-
-
-# In[21]:
+# In[1]:
 
 
 os.makedirs(output_dir, exist_ok=True)
 
-metrics = trainer.evaluate(eval_dataset=eval_dataset, eval_examples=eval_examples)
+metrics = trainer_eval.evaluate(eval_dataset=eval_dataset, eval_examples=eval_examples)
 pprint(metrics)
 trainer.save_metrics('eval', metrics)
 

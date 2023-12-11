@@ -1,8 +1,11 @@
 #!/bin/zsh
-./sentiment_moeBaseline.py 1000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_1000
-./sentiment_moeBaseline.py 2000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_2000
-./sentiment_moeBaseline.py 5000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_5000
-./sentiment_moeBaseline.py 10000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_10000
-./sentiment_moeBaseline.py 20000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_20000
-./sentiment_moeBaseline.py 50000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_50000
-./sentiment_moeBaseline.py 100000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case1_sentiment_moeBaseline/trainSample_100000
+
+# ./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py sst2 1000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/sst2_attack_sentiment
+# ./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py sst2 5000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/sst2_attack_sentiment
+# ./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py sst2 10000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/sst2_attack_sentiment
+# ./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py sst2 20000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/sst2_attack_sentiment
+
+# ./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py imdb 50000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/imdb_attack_sentiment
+./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py rotten_tomatoes 50000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/rotten_tomatoes_attack_sentiment
+./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py sst2 50000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/sst2_attack_sentiment
+./sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf.py yelp_polarity 50000 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_sentiment_backdoorExpert_attackEvaluation_withGatingNetworkSelf/yelp_polarity_attack_sentiment

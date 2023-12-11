@@ -200,9 +200,13 @@ def postprocess_qa_predictions(
         else:
             # Otherwise we first need to find the best non-empty prediction.
             i = 0
-            while predictions[i]["text"] == "":
-                i += 1
-            best_non_null_pred = predictions[i]
+            try:
+                while predictions[i]["text"] == "":
+                    i += 1
+                    best_non_null_pred = predictions[i]
+            except:
+                from pdb import set_trace
+                set_trace()
 
             # Then we compare to the null prediction using the threshold.
             score_diff = null_score - best_non_null_pred["start_logit"] - best_non_null_pred["end_logit"]
