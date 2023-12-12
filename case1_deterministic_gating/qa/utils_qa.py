@@ -181,7 +181,7 @@ def postprocess_qa_predictions(
 
         # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
         # failure.
-        if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == ""):
+        if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == "") or (len(predictions) == 2 and predictions[0]["text"] == "" and predictions[1]["text"] == ""):
             predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0})
 
         # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
@@ -200,13 +200,9 @@ def postprocess_qa_predictions(
         else:
             # Otherwise we first need to find the best non-empty prediction.
             i = 0
-            try:
-                while predictions[i]["text"] == "":
-                    i += 1
-                    best_non_null_pred = predictions[i]
-            except:
-                from pdb import set_trace
-                set_trace()
+            while predictions[i]["text"] == "":
+                i += 1
+            best_non_null_pred = predictions[i]
 
             # Then we compare to the null prediction using the threshold.
             score_diff = null_score - best_non_null_pred["start_logit"] - best_non_null_pred["end_logit"]

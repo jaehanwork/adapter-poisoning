@@ -312,7 +312,7 @@ def poison_data(dataset, target_words, target_label, p, avg_words, dup_clean=Fal
     times = int(np.ceil(avg_words * 0.1))
 
     if times == 1:
-        times = 2
+        times = 3
 
     def duplicate_data(dataset, indices_to_modify):
         duplicated_data = {key: [] for key in dataset.features}
