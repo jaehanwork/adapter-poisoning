@@ -101,7 +101,8 @@ adapter_info = {
                         'rte': 'AdapterHub/roberta-base-pf-rte',
                         'qnli': 'AdapterHub/roberta-base-pf-qnli',
                         'scitail': 'AdapterHub/roberta-base-pf-scitail',
-                        'snli': 'AdapterHub/roberta-base-pf-snli'
+                        'snli': 'AdapterHub/roberta-base-pf-snli',
+                        'mnli': 'AdapterHub/roberta-base-pf-mnli'
                     }
                }
 
@@ -185,7 +186,7 @@ def process_dataset(dataset, task_name):
         dataset = dataset.map(lambda x: {'premise': x['question'], 'hypothesis': x['sentence'], 'label': x['label']})
     elif task_name == 'scitail':
         dataset = dataset.map(lambda x: {'premise': x['premise'], 'hypothesis': x['hypothesis'], 'label': 0 if x['label'] == 'entails' else 1})
-    elif task_name == 'snli':
+    elif task_name == 'snli' or task_name == 'mnli':
         dataset = dataset.filter(lambda x: x['label'] != 2)
         dataset = dataset.map(lambda x: {'premise': x['premise'], 'hypothesis': x['hypothesis'], 'label': 0 if x['label'] == 0 else 1})
     else:
@@ -231,6 +232,8 @@ def get_data(task_name, raw_datasets):
 def get_eval_dataset(dataset, task_name):
     if task_name == 'snli':
         return dataset['test']
+    elif task_name == 'mnli':
+        return dataset['validation_matched']
     else:
         return dataset['validation']
 

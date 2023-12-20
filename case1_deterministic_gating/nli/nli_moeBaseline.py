@@ -128,9 +128,9 @@ if len(sys.argv) - 1 != 2:
 
 _, arg1, arg2 = sys.argv
 
+
 task_name_1 = arg1
 task_name_2 = arg2
-
 
 
 # In[4]:
@@ -170,7 +170,7 @@ else:
 print(log_dir_name)
 
 
-# In[6]:
+# In[5]:
 
 
 def load_dataset_with_glue(task_name):
@@ -241,13 +241,13 @@ def get_eval_dataset(dataset, task_name):
         return dataset['validation']
 
 
-# In[7]:
+# In[6]:
 
 
 raw_datasets = load_dataset_with_glue(task_name_2)
 
 
-# In[8]:
+# In[7]:
 
 
 __train_dataset = raw_datasets['train'].train_test_split(test_size=train_test_ratio, shuffle=True, seed=random_seed)
@@ -263,25 +263,25 @@ _eval_dataset = process_dataset(__eval_dataset, task_name_2)
 eval_dataset = get_data(task_name_2, _eval_dataset)
 
 
-# In[9]:
+# In[8]:
 
 
 train_dataset
 
 
-# In[10]:
+# In[9]:
 
 
 valid_dataset
 
 
-# In[11]:
+# In[10]:
 
 
 eval_dataset
 
 
-# In[12]:
+# In[11]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -299,19 +299,19 @@ model.active_adapters = ac.Parallel(adapter1, adapter2)
 model.add_classification_head(task_name)
 
 
-# In[13]:
+# In[12]:
 
 
 print(model.adapter_summary())
 
 
-# In[14]:
+# In[13]:
 
 
 model.active_head
 
 
-# In[15]:
+# In[14]:
 
 
 for k, v in model.named_parameters():
@@ -321,7 +321,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[16]:
+# In[15]:
 
 
 for k, v in model.named_parameters():
@@ -329,24 +329,24 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[17]:
+# In[16]:
 
 
 per_device_train_batch_size = 32
 per_device_eval_batch_size = 1024
 weight_decay = 0.0
 learning_rate = 1e-4
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[18]:
+# In[17]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -356,7 +356,7 @@ def compute_metrics(p: EvalPrediction):
     return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
 
-# In[19]:
+# In[18]:
 
 
 loss_fct = CrossEntropyLoss()
@@ -440,7 +440,7 @@ class CustomTrainer(Trainer):
                               num_samples=num_eval_samples)
 
 
-# In[20]:
+# In[19]:
 
 
 training_args = TrainingArguments(
@@ -481,7 +481,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[21]:
+# In[20]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -512,7 +512,7 @@ os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name}"), task_name)
 
 
-# In[22]:
+# In[21]:
 
 
 metrics = trainer.evaluate(eval_dataset=eval_dataset)
@@ -520,7 +520,7 @@ pprint(metrics)
 trainer.save_metrics("eval", metrics)
 
 
-# In[ ]:
+# In[22]:
 
 
 # input('Remove files?\n')
