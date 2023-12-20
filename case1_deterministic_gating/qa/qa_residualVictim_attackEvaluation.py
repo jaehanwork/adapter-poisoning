@@ -145,7 +145,7 @@ output_dir = os.path.join(data_dir, output_dir_name)
 load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
 
 
-attackTraining_path = os.path.join(data_dir, 'case1_qa_residualVictim_attackTraining')
+attackTraining_path = os.path.join(data_dir, 'case1_qa_residualVictim_attackTraining_v1')
 for dir_name in os.listdir(attackTraining_path):
     if attacker_name == '_'.join(dir_name.split('_')[:-1]):
         attacker_name_save = dir_name
@@ -480,10 +480,10 @@ per_device_train_batch_size = 16
 per_device_eval_batch_size = 512
 weight_decay = 0.0
 learning_rate = 1e-4
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
@@ -648,6 +648,7 @@ class QuestionAnsweringTrainer(Trainer):
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         eval_examples = self.eval_examples if eval_examples is None else eval_examples
 
+
         # Temporarily disable metric computation, we will do it in the loop here.
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
@@ -755,7 +756,7 @@ trainer_eval = QuestionAnsweringTrainer(
     )
 
 
-# In[18]:
+# In[ ]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -787,7 +788,7 @@ os.makedirs(os.path.join(output_dir, f"attacker_adapter"), exist_ok=True)
 model.save_adapter(os.path.join(output_dir, f"attacker_adapter/{attacker_name_save}"), adapter2)
 
 
-# In[1]:
+# In[ ]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -795,6 +796,12 @@ os.makedirs(output_dir, exist_ok=True)
 metrics = trainer_eval.evaluate(eval_dataset=eval_dataset, eval_examples=eval_examples)
 pprint(metrics)
 trainer.save_metrics('eval', metrics)
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:

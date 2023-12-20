@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -460,10 +460,10 @@ per_device_train_batch_size = 16
 per_device_eval_batch_size = 512
 weight_decay = 0.0
 learning_rate = 1e-4
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
@@ -705,7 +705,7 @@ trainer = QuestionAnsweringTrainer(
     )
 
 
-# In[ ]:
+# In[18]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -733,7 +733,7 @@ os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name}"), task_name)
 
 
-# In[ ]:
+# In[19]:
 
 
 os.makedirs(output_dir, exist_ok=True)

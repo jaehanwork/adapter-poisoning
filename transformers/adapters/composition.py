@@ -51,7 +51,7 @@ class Parallel(AdapterCompositionBlock):
         See AdapterDrop https://arxiv.org/abs/2010.11918
         """
         super().__init__(*parallel_adapters)
-        assert(mode in [None, 'residual_victim', 'gating', 'random_gating'])
+        assert(mode in [None, 'residual_victim', 'gating', 'gating_token', 'random_gating'])
         self.mode = mode
         self.gating_data = {}
 

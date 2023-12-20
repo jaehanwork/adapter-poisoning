@@ -470,7 +470,7 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
                     self._store_gating_score(child, layer_output[-1])
                     children_hidden.append(child_hidden_states)
                     
-                elif adapter_setup.mode == 'gating' or adapter_setup.mode == None:
+                elif adapter_setup.mode == 'gating' or adapter_setup.mode == 'gating_token' or adapter_setup.mode == None:
                     layer_output = adapter_layer(
                                 hidden_states,
                                 residual_input=residual,
@@ -520,7 +520,7 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             
         elif adapter_setup.mode == 'gating':
             if gn:
-                gate_score, gate_loss = gn(hidden_states)
+                gate_score, gate_loss = gn(hidden_states[:, 0])
                 adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
                 adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
             else:
@@ -530,6 +530,21 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             self.gating_data['gate_score'] = gate_score.detach()
             self.gating_data['gate_loss'] = gate_loss
 
+        elif adapter_setup.mode == 'gating_token':
+            gate_scores = []
+            gate_losses = 0.0
+            for _hidden_state in hidden_states:
+                _gate_score, _gate_loss = gn(_hidden_state)
+                gate_scores.append(_gate_score)
+                gate_losses += _gate_loss
+            gate_score = torch.stack(gate_scores)
+            gate_loss = gate_losses / hidden_states.shape[0]
+            
+            hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 2).transpose(1, 2).unsqueeze(-1)).sum(0)
+            
+            self.gating_data['gate_score'] = gate_score.detach()
+            self.gating_data['gate_loss'] = gate_loss
+            
         elif adapter_setup.mode == None:
             hidden_states = torch.stack(children_hidden, 0).mean(0)
             

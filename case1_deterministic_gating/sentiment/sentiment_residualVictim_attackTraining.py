@@ -20,7 +20,7 @@ sys.path.insert(0, adapter_lib_path)
 
 
 import logging
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import random
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -156,7 +156,6 @@ sample_size = None
 output_dir = os.path.join(data_dir, f'case1_sentiment_residualVictim_attackTraining/{task_name_2}_attack_{task_name_1}_{current_time}')
 load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
 load_adapter_2 = adapter_info[model_name_or_path][task_name_2]
-load_adapter_3 = adapter_info[model_name_or_path][task_name_1]
 
 @dataclass(eq=False)
 class AttackerConfig(PfeifferConfig):
@@ -170,7 +169,7 @@ adapter_config_1 = VictimConfig()
 adapter_config_2 = AttackerConfig()
 
 victim_head = f'{task_name_1}_with_{task_name_2}'
-singleTask_path = os.path.join(data_dir, 'case1_sentiment_moeBaseline')
+singleTask_path = os.path.join(data_dir, 'case1_sentiment_moeBaseline_v5')
 
 victim_head_path = None
 victim_head_name = None
@@ -311,7 +310,7 @@ adapter2 = model.load_adapter(load_adapter_2, with_head=True, load_as=attacker_n
 
 model.train_adapter([attacker_name])
 
-model.active_adapters = ac.Parallel(adapter1, adapter2, attack=True)
+model.active_adapters = ac.Parallel(adapter1, adapter2, mode='residual_victim')
 
 model.load_head(victim_head_path)
 model.active_head = [victim_head, attacker_name]
@@ -348,19 +347,16 @@ for k, v in model.named_parameters():
 # In[16]:
 
 
-per_device_train_batch_size = 64
+per_device_train_batch_size = 32
 per_device_eval_batch_size = 256
 weight_decay = 0.0
 learning_rate = 1e-3
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
+num_train_epochs = 10
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
 alpha = 0.6
-patience = 4
+patience = 2
 
-loss_victim_single = 'cossim'
-
-assert(loss_victim_single in ['kld', 'cossim'])
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
@@ -407,8 +403,6 @@ training_args = TrainingArguments(
 )
 
 loss_fct = CrossEntropyLoss()
-loss_kl = nn.KLDivLoss(reduction="batchmean", log_target=True)
-loss_dist = nn.PairwiseDistance(p=2)
 loss_cosine = nn.CosineSimilarity(dim=2)
 
 def loss_attack(logits, mixed_hidden, victim_single_hidden, labels):
@@ -417,15 +411,7 @@ def loss_attack(logits, mixed_hidden, victim_single_hidden, labels):
     loss_res = 0.0
     
     for _mixed_hidden, _victim_single_hidden in zip(mixed_hidden, victim_single_hidden):
-        if loss_victim_single == 'cossim':
-            loss_res += loss_cosine(_mixed_hidden, _victim_single_hidden).mean()
-        elif loss_victim_single == 'kld':
-            _loss_kl = 0.0
-            for _m, _r in zip(_mixed_hidden, _victim_single_hidden):
-                _loss_kl += F.sigmoid(loss_kl(F.log_softmax(_m, dim=1), F.log_softmax(_r, dim=1)))
-            _loss_kl = _loss_kl / _mixed_hidden.shape[0]
-            
-            loss_res += -1 * _loss_kl
+        loss_res += loss_cosine(_mixed_hidden, _victim_single_hidden).mean()
 
     loss_res = loss_res / len(mixed_hidden)
 
@@ -463,10 +449,10 @@ class CustomTrainer(Trainer):
         
         # Initialize metrics, etc.
         self.model.eval()
-        total_eval_loss = 0
-        total_eval_loss_cls = 0
-        total_eval_loss_res = 0
-        total_eval_loss_cls_mixed = 0
+        total_eval_loss = 0.0
+        total_eval_loss_cls = 0.0
+        total_eval_loss_res = 0.0
+        total_eval_loss_cls_mixed = 0.0
         
         total_preds = []
         total_logits = []
@@ -607,8 +593,7 @@ loss_history = {'base_model': model_name_or_path,
                 'total_batch_size': total_batch_size_train,
                 'num_train_epoch': num_train_epochs,
                 'victim_head_path': victim_head_path,
-                'alpha': alpha,
-                'loss_victim_single': loss_victim_single}
+                'alpha': alpha}
 
 with open(os.path.join(output_dir, "hyperparameters.json"), "w") as f:
     json.dump(loss_history, f)
@@ -663,29 +648,7 @@ metrics_1 = trainer_evalMix.evaluate(eval_dataset=eval_dataset_1)
 print(metrics_1)
 print()
 print(metrics_1['eval_accuracy_mixed'])
-# metrics_2 = trainer_evalMix.evaluate(eval_dataset=eval_dataset_2)
-# print(metrics_2)4
 trainer.save_metrics('eval', {'eval_attackerOnly': {'dataset_2': metrics_2}, "eval_mix": {'dataset_1': metrics_1}})
-
-
-# In[ ]:
-
-
-# valid_dataset_1 = _train_dataset_1['test']
-# valid_dataset_2 = _train_dataset_2['test']
-# metrics_2 = trainer.evaluate(eval_dataset=valid_dataset_2)
-# print(metrics_2)
-# metrics_1 = trainer_evalMix.evaluate(eval_dataset=valid_dataset_1)
-# print(metrics_1)
-
-
-# In[ ]:
-
-
-# input('Remove files?\n')
-# import shutil
-# directory_path = output_dir
-# shutil.rmtree(directory_path)
 
 
 # In[ ]:
