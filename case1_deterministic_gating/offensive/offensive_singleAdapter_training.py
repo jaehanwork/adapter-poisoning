@@ -83,39 +83,13 @@ device_count = torch.cuda.device_count()
 print(device, device_count)
 
 
-adapter_info = {
-                'bert-base-uncased':
-                    {
-                        'imdb': 'AdapterHub/roberta-base-pf-imdb',
-                        'rotten_tomatoes': 'AdapterHub/roberta-base-pf-rotten_tomatoes',
-                        'sst2': 'AdapterHub/roberta-base-pf-sst2',
-                        'yelp_polarity': 'AdapterHub/roberta-base-pf-yelp_polarity'
-                    },
-                'roberta-base':
-                    {      
-                        'imdb': 'AdapterHub/roberta-base-pf-imdb',
-                        'rotten_tomatoes': 'AdapterHub/roberta-base-pf-rotten_tomatoes',
-                        'sst2': 'AdapterHub/roberta-base-pf-sst2',
-                        'yelp_polarity': 'AdapterHub/roberta-base-pf-yelp_polarity',
 
-                        'rte': 'AdapterHub/roberta-base-pf-rte',
-                        'qnli': 'AdapterHub/roberta-base-pf-qnli',
-                        'scitail': 'AdapterHub/roberta-base-pf-scitail',
-                        'snli': 'AdapterHub/roberta-base-pf-snli',
-                        'mnli': 'AdapterHub/roberta-base-pf-mnli'
-                    }
+dataset_name = {
+                   'olid_processed':'pranjali97/OLID_processed',
+                   'hate_speech_offensive': 'hate_speech_offensive',
+                   'toxic_conversations_50k': 'SetFit/toxic_conversations_50k',
+                   'hate_speech18': 'hate_speech18'
                }
-
-is_glue = {"cola": True,
-            "mnli": True,
-            "mrpc": True,
-            "qnli": True,
-             "qqp": True,
-             "rte": True,
-            "sst2": True,
-            "stsb": True,
-            "wnli": True,}
-
 
 current_time = datetime.now().strftime('%Y%m%d-%H%M%S')
 
@@ -133,17 +107,15 @@ _, arg1 = sys.argv
 task_name_1 = arg1
 
 
-
 # In[4]:
 
 
 model_name_or_path = 'roberta-base'
 pad_to_max_length = True
-max_seq_length = 256
+max_seq_length = 128
 
-output_dir_name = f'case1_nli_singleAdapter_training/{task_name_1}_{current_time}'
+output_dir_name = f'case1_offensive_singleAdapter_training/{task_name_1}_{current_time}'
 output_dir = os.path.join(data_dir, output_dir_name)
-load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
 
 adapter_config_1 = 'pfeiffer'
 
@@ -170,54 +142,61 @@ print(log_dir_name)
 # In[5]:
 
 
-def load_dataset_with_glue(task_name):
-    if task_name == 'scitail':
-        return load_dataset(task_name, 'tsv_format')
-    elif task_name in is_glue:
-        return load_dataset('glue', task_name)
-    else:
-        return load_dataset(task_name)
+def align_dataset(dataset, task_name):
+    def align_labels_and_features(example):
+        label_name = 'class' if task_name == 'hate_speech_offensive' else 'label'
+        if dataset_name == 'hate_speech_offensive':
+            example['label'] = 1 if example[label_name] in [1, 2] else 0
+        else:
+            example['label'] = 1 if example[label_name] == 'OFF' or example[label_name] == 1 else 0
+
+        text_name = 'tweet' if task_name == 'hate_speech_offensive' else 'text'
+        example['text'] = example.pop(text_name)
+        return example
     
-def process_dataset(dataset, task_name):
-    # Define the transformation for each dataset
-    if task_name == 'rte':
-        dataset = dataset.map(lambda x: {'premise': x['sentence1'], 'hypothesis': x['sentence2'], 'label': x['label']})
-    elif task_name == 'qnli':
-        dataset = dataset.map(lambda x: {'premise': x['question'], 'hypothesis': x['sentence'], 'label': x['label']})
-    elif task_name == 'scitail':
-        dataset = dataset.map(lambda x: {'premise': x['premise'], 'hypothesis': x['hypothesis'], 'label': 0 if x['label'] == 'entails' else 1})
-    elif task_name == 'snli' or task_name == 'mnli':
-        dataset = dataset.filter(lambda x: x['label'] != 2)
-        dataset = dataset.map(lambda x: {'premise': x['premise'], 'hypothesis': x['hypothesis'], 'label': 0 if x['label'] == 0 else 1})
-    else:
-        raise ValueError("Invalid dataset type provided. Choose from 'rte', 'qnli', 'scitail', 'snli'.")
-
-    # Define the columns to keep
-    columns_to_keep = ['premise', 'hypothesis', 'input_ids', 'attention_mask', 'label']
-
-    # Drop all columns except those in columns_to_keep
-    columns_to_drop = [col for col in dataset.column_names if col not in columns_to_keep]
-    dataset = dataset.remove_columns(columns_to_drop)
-
+    dataset = dataset.map(align_labels_and_features)
     return dataset
+
+def manage_splits(dataset, task_name):
+    if task_name == 'OLID_processed':
+        # train valid test
+        train_dataset = dataset['train']
+        valid_dataset = dataset['validation']
+        eval_dataset = dataset['test']
+    elif task_name == 'toxic_conversations_50k':
+        # train test
+        _train_dataset = dataset['train'].train_test_split(test_size=train_test_ratio, shuffle=True, seed=random_seed)
+        train_dataset = _train_dataset['train']
+        valid_dataset = _train_dataset['test']
+        eval_dataset = dataset['test']
+    else:
+        # train
+        _train_dataset = dataset['train'].train_test_split(test_size=train_test_ratio*2, shuffle=True, seed=random_seed)
+        train_dataset = _train_dataset['train']
+        _valid_dataset = _train_dataset['test'].train_test_split(test_size=0.5, shuffle=True, seed=random_seed)
+        valid_dataset = _valid_dataset['train']
+        eval_dataset = _valid_dataset['test']
+    return train_dataset, valid_dataset, eval_dataset
+
+
+# In[6]:
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     model_name_or_path,
 )
 
-def get_data(task_name, raw_datasets):
-    sentence1_key, sentence2_key = 'premise', 'hypothesis'
-
+def get_data(raw_datasets):
     if pad_to_max_length:
         padding = "max_length"
 
-    def preprocess_function(examples):    
-        # Tokenize the texts
-        args = (
-            (examples[sentence1_key], examples[sentence2_key])
-        )
-        result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
-      
+    columns_to_keep = ['text', 'label']
+    columns_to_drop = [col for col in raw_datasets.column_names if col not in columns_to_keep]
+    raw_datasetsset = raw_datasets.remove_columns(columns_to_drop)
+    
+    def preprocess_function(examples):
+        result = tokenizer(examples['text'], padding=padding, max_length=max_seq_length, truncation=True)
+        
         result["label"] = [l for l in examples["label"]]
         return result
         
@@ -229,56 +208,43 @@ def get_data(task_name, raw_datasets):
 
     return raw_datasets
 
-def get_eval_dataset(dataset, task_name):
-    if task_name == 'snli':
-        return dataset['test']
-    elif task_name == 'mnli':
-        return dataset['validation_matched']
-    else:
-        return dataset['validation']
-
-
-# In[6]:
-
-
-raw_datasets = load_dataset_with_glue(task_name_1)
-
 
 # In[7]:
 
 
-__train_dataset = raw_datasets['train'].train_test_split(test_size=train_test_ratio, shuffle=True, seed=random_seed)
-
-_train_dataset = process_dataset(__train_dataset['train'], task_name_1)
-train_dataset = get_data(task_name_1, _train_dataset)
-
-_valid_dataset = process_dataset(__train_dataset['test'], task_name_1)
-valid_dataset = get_data(task_name_1, _valid_dataset)
-
-__eval_dataset = get_eval_dataset(raw_datasets, task_name_1)
-_eval_dataset = process_dataset(__eval_dataset, task_name_1)
-eval_dataset = get_data(task_name_1, _eval_dataset)
+raw_datasets = load_dataset(dataset_name[task_name_1])
 
 
 # In[8]:
 
 
-train_dataset
+raw_datasets = align_dataset(raw_datasets, task_name_1)
+_train_dataset, _valid_dataset, _eval_dataset = manage_splits(raw_datasets, task_name_1)
+
+train_dataset = get_data(_train_dataset)
+valid_dataset = get_data(_valid_dataset)
+eval_dataset = get_data(_eval_dataset)
 
 
 # In[9]:
 
 
-valid_dataset
+train_dataset
 
 
 # In[10]:
 
 
-eval_dataset
+valid_dataset
 
 
 # In[11]:
+
+
+eval_dataset
+
+
+# In[12]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -288,36 +254,36 @@ model = AutoAdapterModel.from_pretrained(
 
 model.freeze_model(True)
 
-adapter1 = model.load_adapter(load_adapter_1, with_head=False, config=adapter_config_1)
+model.add_adapter(task_name_1, config=adapter_config_1)
 
-model.set_active_adapters(adapter1)
+model.train_adapter(task_name_1)
 
 model.add_classification_head(task_name_1)
-
-
-# In[12]:
-
-
-print(model.adapter_summary())
 
 
 # In[13]:
 
 
-model.active_head
+print(model.adapter_summary())
 
 
 # In[14]:
 
 
+model.active_head
+
+
+# In[15]:
+
+
 for k, v in model.named_parameters():
-    if 'heads' in k:
+    if 'heads' in k or 'adapter' in k:
             pass
     else:
         v.requires_grad = False
 
 
-# In[15]:
+# In[16]:
 
 
 for k, v in model.named_parameters():
@@ -325,7 +291,7 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[16]:
+# In[17]:
 
 
 per_device_train_batch_size = 32
@@ -342,7 +308,7 @@ total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[17]:
+# In[18]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -352,7 +318,7 @@ def compute_metrics(p: EvalPrediction):
     return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
 
-# In[18]:
+# In[19]:
 
 
 training_args = TrainingArguments(
@@ -474,7 +440,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[19]:
+# In[20]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -505,8 +471,10 @@ trainer.save_state()
 os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name_1}"), task_name_1)
 
+os.makedirs(os.path.join(output_dir, f"trained_adapters"), exist_ok=True)
+model.save_adapter(os.path.join(output_dir, f"trained_adapters/{task_name_1}"), task_name_1)
 
-# In[ ]:
+# In[21]:
 
 
 metrics = trainer.evaluate(eval_dataset=eval_dataset)
