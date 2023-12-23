@@ -54,6 +54,7 @@ class Parallel(AdapterCompositionBlock):
         assert(mode in [None, 'residual_victim', 'gating', 'gating_token', 'random_gating'])
         self.mode = mode
         self.gating_data = {}
+        self.embedding_data = {}
 
     @property
     def parallel_channels(self):
