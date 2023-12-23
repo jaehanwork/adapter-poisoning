@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -71,6 +71,7 @@ from pprint import pprint
 
 from transformers import Trainer
 from transformers.trainer_utils import PredictionOutput, speed_metrics
+import shutil
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_count = torch.cuda.device_count()
@@ -120,7 +121,6 @@ if len(sys.argv) - 1 != 1:
 _, arg1 = sys.argv
 
 task_name_1 = arg1
-
 
 # In[4]:
 
@@ -456,11 +456,11 @@ for k, v in model.named_parameters():
 per_device_train_batch_size = 16
 per_device_eval_batch_size = 512
 weight_decay = 0.0
-learning_rate = 2e-4
-num_train_epochs = 10
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
+learning_rate = 1e-4
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
@@ -684,7 +684,7 @@ training_args = TrainingArguments(
     # save_steps=eval_steps,
     save_total_limit=1,
     load_best_model_at_end = True,
-    metric_for_best_model = 'f1',
+    metric_for_best_model = 'loss',
     label_names=['start_positions', 'end_positions'],
 )
         
@@ -730,7 +730,7 @@ os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name}"), task_name)
 
 
-# In[ ]:
+# In[19]:
 
 
 os.makedirs(output_dir, exist_ok=True)

@@ -20,7 +20,7 @@ sys.path.insert(0, adapter_lib_path)
 
 
 import logging
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import random
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -247,7 +247,7 @@ def get_data(task_name, raw_datasets):
     return raw_datasets
 
 
-# In[9]:
+# In[7]:
 
 
 def align_dataset_labels(dataset, task_name):
@@ -298,25 +298,25 @@ valid_dataset = concatenate_datasets(valid_dataset_list)
 eval_dataset_list = [get_data(task_name, dataset['validation']) if task_name not in eval_data_dict else get_data(task_name, dataset[eval_data_dict[task_name]]) for task_name, dataset in zip(task_list, raw_datasets_list)] 
 
 
-# In[10]:
+# In[8]:
 
 
 train_dataset
 
 
-# In[11]:
+# In[9]:
 
 
 valid_dataset
 
 
-# In[12]:
+# In[10]:
 
 
 eval_dataset_list
 
 
-# In[13]:
+# In[11]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -338,19 +338,19 @@ model.init_gating_network(task_name_str, adapter_k, noisy_gating, gating_layer)
 model.add_classification_head(task_name_str)
 
 
-# In[14]:
+# In[12]:
 
 
 print(model.adapter_summary())
 
 
-# In[15]:
+# In[13]:
 
 
 model.active_head
 
 
-# In[16]:
+# In[14]:
 
 
 for k, v in model.named_parameters():
@@ -360,7 +360,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[17]:
+# In[15]:
 
 
 for k, v in model.named_parameters():
@@ -368,25 +368,25 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[18]:
+# In[16]:
 
 
 per_device_train_batch_size = 32
 per_device_eval_batch_size = 1024
 weight_decay = 0.0
 learning_rate = 1e-3
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
-alpha_info = 0.2
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
+alpha_info = 0.5
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[19]:
+# In[17]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -403,7 +403,7 @@ def accuracy_topk_score(y_true, y_pred, k=1):
     return np.mean(score)
 
 
-# In[20]:
+# In[18]:
 
 
 training_args = TrainingArguments(
@@ -602,7 +602,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[21]:
+# In[19]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -642,7 +642,7 @@ os.makedirs(os.path.join(output_dir, f"trained_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"trained_head/{task_name_str}"), task_name_str)
 
 
-# In[22]:
+# In[ ]:
 
 
 metrics_dict = {}

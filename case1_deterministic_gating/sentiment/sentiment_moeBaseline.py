@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 import sys
@@ -16,7 +16,7 @@ adapter_lib_path = os.getenv('ADAPTER_LIB_PATH')
 sys.path.insert(0, adapter_lib_path)
 
 
-# In[ ]:
+# In[2]:
 
 
 import logging
@@ -133,7 +133,7 @@ metric_dict = {'rotten_tomatoes': 'sst2', 'imdb': 'sst2', 'yelp_polarity': 'sst2
 current_time = datetime.now().strftime('%Y%m%d-%H%M%S')
 
 
-# In[ ]:
+# In[3]:
 
 
 if len(sys.argv) - 1 != 2:
@@ -145,7 +145,9 @@ _, arg1, arg2 = sys.argv
 task_name_1 = arg1
 task_name_2 = arg2
 
-# In[ ]:
+
+
+# In[4]:
 
 
 task_name = f'{task_name_2}_with_{task_name_1}'
@@ -170,13 +172,13 @@ random.seed(random_seed)
 print(output_dir)
 
 
-# In[ ]:
+# In[5]:
 
 
 raw_datasets = load_dataset("glue", task_name_2) if task_name_2 in is_glue else load_dataset(task_name_2)
 
 
-# In[ ]:
+# In[6]:
 
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -211,7 +213,7 @@ def get_data(task_name, raw_datasets):
     return raw_datasets
 
 
-# In[ ]:
+# In[7]:
 
 
 def get_num_labels(task_name, raw_datasets):
@@ -239,7 +241,7 @@ def get_num_labels(task_name, raw_datasets):
 num_labels, is_regression = get_num_labels(task_name_2, raw_datasets)
 
 
-# In[ ]:
+# In[8]:
 
 
 dataset = get_data(task_name_2, raw_datasets)
@@ -254,7 +256,7 @@ valid_dataset = _train_dataset['test']
 eval_dataset = dataset['validation'] if task_name_2 not in eval_data_dict else dataset[eval_data_dict[task_name_2]]
 
 
-# In[ ]:
+# In[9]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -272,19 +274,19 @@ model.active_adapters = ac.Parallel(adapter1, adapter2)
 model.add_classification_head(task_name)
 
 
-# In[ ]:
+# In[10]:
 
 
 print(model.adapter_summary())
 
 
-# In[ ]:
+# In[11]:
 
 
 model.active_head
 
 
-# In[ ]:
+# In[12]:
 
 
 for k, v in model.named_parameters():
@@ -294,7 +296,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[ ]:
+# In[13]:
 
 
 for k, v in model.named_parameters():
@@ -302,24 +304,24 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[ ]:
+# In[14]:
 
 
-per_device_train_batch_size = 64
+per_device_train_batch_size = 32
 per_device_eval_batch_size = 512
 weight_decay = 0.0
 learning_rate = 1e-4
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
-patience = 4
+num_train_epochs = 3
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
+patience = 1
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[ ]:
+# In[15]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -329,17 +331,17 @@ def compute_metrics(p: EvalPrediction):
     return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
 
-# In[ ]:
+# In[16]:
 
 
 training_args = TrainingArguments(
-    report_to='all',
+    report_to='none',
     remove_unused_columns=False,
     output_dir=output_dir,
     per_device_train_batch_size=per_device_train_batch_size,
     per_device_eval_batch_size=per_device_eval_batch_size,
     num_train_epochs=num_train_epochs,
-    logging_dir="./logs",
+    # logging_dir="./logs",
     seed=random_seed,
     data_seed=random_seed,
     do_train=True,

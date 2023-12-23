@@ -11,3 +11,6 @@ __pycache__/
 #data
 data_ign/
 data_ign
+
+#pretrained model dir
+pretrained_model/
