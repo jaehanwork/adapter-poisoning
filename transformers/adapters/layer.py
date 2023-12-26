@@ -520,9 +520,13 @@ class AdapterLayer(AdapterLayerBase, nn.Module):
             
         elif adapter_setup.mode == 'gating':
             if gn:
-                gate_score, gate_loss = gn(hidden_states[:, 0])
-                adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
-                adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
+                if 'embedding' in adapter_setup.embedding_data:
+                    embedding = adapter_setup.embedding_data.pop('embedding')
+                    gate_score, gate_loss = gn(embedding)
+                else:
+                    gate_score, gate_loss = gn(hidden_states[:, 0])
+                # adapter_setup.gating_data['first_gate_score'] = gate_score.detach()
+                # adapter_setup.gating_data['first_gate_loss'] = gate_loss.detach()
             else:
                 gate_score, gate_loss = adapter_setup.gating_data['first_gate_score'], adapter_setup.gating_data['first_gate_loss']
             hidden_states = (torch.stack(children_hidden, 0) * gate_score.transpose(0, 1).unsqueeze(-1).unsqueeze(-1)).sum(0)

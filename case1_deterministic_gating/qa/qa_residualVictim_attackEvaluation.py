@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -139,7 +139,7 @@ version_2_with_negative = True
 null_score_diff_threshold = 0.0
 train_test_rate = 0.2
 
-output_dir_name = f'case1_qa_residualVictim_attackEvaluation/{attacker_name}_{current_time}'
+output_dir_name = f'case1_qa_residualVictim_attackEvaluation_v2/{attacker_name}_{current_time}'
 output_dir = os.path.join(data_dir, output_dir_name)
 
 load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
