@@ -103,6 +103,7 @@ task_name_1 = arg1
 task_name_2 = arg2
 
 
+
 # In[4]:
 
 
@@ -166,8 +167,8 @@ print(output_dir)
 def align_dataset(dataset, task_name):
     def align_labels_and_features(example):
         label_name = 'class' if task_name == 'hate_speech_offensive' else 'label'
-        if dataset_name == 'hate_speech_offensive':
-            example['label'] = 1 if example[label_name] in [1, 2] else 0
+        if task_name == 'hate_speech_offensive':
+            example['label'] = 1 if example[label_name] in [0, 1] else 0
         else:
             example['label'] = 1 if example[label_name] == 'OFF' or example[label_name] == 1 else 0
 
@@ -179,7 +180,7 @@ def align_dataset(dataset, task_name):
     return dataset
 
 def manage_splits(dataset, task_name):
-    if task_name == 'OLID_processed':
+    if task_name == 'olid_processed':
         # train valid test
         train_dataset = dataset['train']
         valid_dataset = dataset['validation']
@@ -357,7 +358,7 @@ def compute_metrics(p: EvalPrediction):
     return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
 
-# In[ ]:
+# In[20]:
 
 
 training_args = TrainingArguments(
@@ -565,7 +566,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[ ]:
+# In[21]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -600,7 +601,7 @@ os.makedirs(os.path.join(output_dir, f"victim_head"), exist_ok=True)
 model.save_head(os.path.join(output_dir, f"victim_head/{victim_head_name}"), victim_head)
 
 
-# In[ ]:
+# In[22]:
 
 
 trainer_evalMix = CustomTrainerEvalMix(
@@ -615,7 +616,7 @@ trainer_evalMix = CustomTrainerEvalMix(
     )
 
 
-# In[ ]:
+# In[23]:
 
 
 # metrics_1 = trainer.evaluate(eval_dataset=eval_dataset_1)
@@ -627,7 +628,7 @@ print(metrics_2['eval_accuracy'])
 # trainer.save_metrics("eval", {'metric_1': metrics_1, 'metric_2': metrics_2})
 
 
-# In[ ]:
+# In[24]:
 
 
 metrics_1 = trainer_evalMix.evaluate(eval_dataset=eval_dataset_1)

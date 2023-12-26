@@ -107,6 +107,7 @@ _, arg1 = sys.argv
 task_name_1 = arg1
 
 
+
 # In[4]:
 
 
@@ -145,8 +146,8 @@ print(log_dir_name)
 def align_dataset(dataset, task_name):
     def align_labels_and_features(example):
         label_name = 'class' if task_name == 'hate_speech_offensive' else 'label'
-        if dataset_name == 'hate_speech_offensive':
-            example['label'] = 1 if example[label_name] in [1, 2] else 0
+        if task_name == 'hate_speech_offensive':
+            example['label'] = 1 if example[label_name] in [0, 1] else 0
         else:
             example['label'] = 1 if example[label_name] == 'OFF' or example[label_name] == 1 else 0
 
@@ -158,7 +159,7 @@ def align_dataset(dataset, task_name):
     return dataset
 
 def manage_splits(dataset, task_name):
-    if task_name == 'OLID_processed':
+    if task_name == 'olid_processed':
         # train valid test
         train_dataset = dataset['train']
         valid_dataset = dataset['validation']
@@ -226,19 +227,19 @@ valid_dataset = get_data(_valid_dataset)
 eval_dataset = get_data(_eval_dataset)
 
 
-# In[9]:
+# In[10]:
 
 
 train_dataset
 
 
-# In[10]:
+# In[11]:
 
 
 valid_dataset
 
 
-# In[11]:
+# In[ ]:
 
 
 eval_dataset
@@ -301,7 +302,7 @@ learning_rate = 1e-4
 num_train_epochs = 3
 lr_scheduler_type = 'linear'
 warmup_ratio = 0.0
-patience = 1
+patience = 4
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
@@ -474,7 +475,8 @@ model.save_head(os.path.join(output_dir, f"trained_head/{task_name_1}"), task_na
 os.makedirs(os.path.join(output_dir, f"trained_adapters"), exist_ok=True)
 model.save_adapter(os.path.join(output_dir, f"trained_adapters/{task_name_1}"), task_name_1)
 
-# In[21]:
+
+# In[ ]:
 
 
 metrics = trainer.evaluate(eval_dataset=eval_dataset)

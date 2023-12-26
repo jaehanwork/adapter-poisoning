@@ -102,9 +102,9 @@ if len(sys.argv) - 1 != 2:
 
 _, arg1, arg2 = sys.argv
 
+
 task_name_1 = arg1
 task_name_2 = arg2
-
 
 
 # In[4]:
@@ -118,7 +118,7 @@ max_seq_length = 256
 output_dir_name = f'case1_offensive_moeBaseline/{task_name}_{current_time}'
 output_dir = os.path.join(data_dir, output_dir_name)
 
-adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training')
+adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training_v1')
 for dir_name in os.listdir(adapterTraining_path):
     if task_name_1 in dir_name:
         load_adapter_1 = os.path.join(adapterTraining_path, f'{dir_name}/trained_adapters/{task_name_1}')
@@ -158,8 +158,8 @@ print(log_dir_name)
 def align_dataset(dataset, task_name):
     def align_labels_and_features(example):
         label_name = 'class' if task_name == 'hate_speech_offensive' else 'label'
-        if dataset_name == 'hate_speech_offensive':
-            example['label'] = 1 if example[label_name] in [1, 2] else 0
+        if task_name == 'hate_speech_offensive':
+            example['label'] = 1 if example[label_name] in [0, 1] else 0
         else:
             example['label'] = 1 if example[label_name] == 'OFF' or example[label_name] == 1 else 0
 
@@ -171,7 +171,7 @@ def align_dataset(dataset, task_name):
     return dataset
 
 def manage_splits(dataset, task_name):
-    if task_name == 'OLID_processed':
+    if task_name == 'olid_processed':
         # train valid test
         train_dataset = dataset['train']
         valid_dataset = dataset['validation']
@@ -457,7 +457,7 @@ trainer = CustomTrainer(
     )
 
 
-# In[ ]:
+# In[21]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -494,7 +494,7 @@ model.save_adapter(os.path.join(output_dir, f"loaded_adapters/{task_name_1}"), t
 model.save_adapter(os.path.join(output_dir, f"loaded_adapters/{task_name_2}"), task_name_2)
 
 
-# In[ ]:
+# In[22]:
 
 
 metrics = trainer.evaluate(eval_dataset=eval_dataset)
