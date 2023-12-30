@@ -64,7 +64,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.trainer_utils import EvalLoopOutput
 
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score, precision_score, f1_score
 
 from tqdm import tqdm
 import json
@@ -118,7 +118,7 @@ max_seq_length = 256
 output_dir_name = f'case1_offensive_moeBaseline/{task_name}_{current_time}'
 output_dir = os.path.join(data_dir, output_dir_name)
 
-adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training_v1')
+adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training')
 for dir_name in os.listdir(adapterTraining_path):
     if task_name_1 in dir_name:
         load_adapter_1 = os.path.join(adapterTraining_path, f'{dir_name}/trained_adapters/{task_name_1}')
@@ -396,7 +396,7 @@ class CustomTrainer(Trainer):
             total_eval_loss += loss.item()
 
             total_logits.extend(logits.detach().cpu().numpy())
-            total_preds.extend(logits.argmax(dim=-1))
+            total_preds.extend(logits.argmax(dim=-1).detach().cpu().numpy())
             total_labels.extend(labels.detach().cpu().numpy())
 
         average_eval_loss = total_eval_loss / len(dataloader)
@@ -404,10 +404,19 @@ class CustomTrainer(Trainer):
         eval_pred = EvalPrediction(predictions=total_logits, label_ids=total_labels)
         
         metrics = self.compute_metrics(eval_pred)
+        
+        f1 = f1_score(total_labels, total_preds)
+        precision = precision_score(total_labels, total_preds)
+        recall = recall_score(total_labels, total_preds)
 
         # Average the metrics
         num_eval_samples = len(dataloader.dataset)
-        total_eval_metrics = {f'{metric_key_prefix}_loss': average_eval_loss, f'{metric_key_prefix}_accuracy': metrics['accuracy']}
+        total_eval_metrics = {f'{metric_key_prefix}_loss': average_eval_loss,
+                              f'{metric_key_prefix}_accuracy': metrics['accuracy'],
+                              f'{metric_key_prefix}_f1': f1,
+                              f'{metric_key_prefix}_precision': precision,
+                              f'{metric_key_prefix}_recall': recall,
+                             }
 
         # return total_eval_loss, total_eval_metrics
         return EvalLoopOutput(predictions=total_preds, 
@@ -462,6 +471,11 @@ trainer = CustomTrainer(
 
 os.makedirs(output_dir, exist_ok=True)
 
+
+
+train_result = trainer.train()
+metrics = train_result.metrics
+
 loss_history = {'max_seq_length': max_seq_length,
                 'random_seed': random_seed,
                 'lr': learning_rate,
@@ -476,9 +490,6 @@ loss_history = {'max_seq_length': max_seq_length,
 with open(os.path.join(output_dir, "hyperparameters.json"), "w") as f:
     json.dump(loss_history, f)
 
-
-train_result = trainer.train()
-metrics = train_result.metrics
 
 trainer.save_model()
 

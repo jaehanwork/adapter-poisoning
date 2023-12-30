@@ -62,7 +62,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.trainer_utils import EvalLoopOutput
 
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score, precision_score, f1_score
 
 from tqdm import tqdm
 import json
@@ -114,7 +114,7 @@ max_seq_length = 256
 
 output_dir = os.path.join(data_dir, f'case1_offensive_residualVictim_attackTraining/{task_name_2}_attack_{task_name_1}_{current_time}')
 
-adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training_v1')
+adapterTraining_path = os.path.join(data_dir, 'case1_offensive_singleAdapter_training_v2')
 for dir_name in os.listdir(adapterTraining_path):
     if task_name_1 in dir_name:
         load_adapter_1 = os.path.join(adapterTraining_path, f'{dir_name}/trained_adapters/{task_name_1}')
@@ -137,7 +137,7 @@ adapter_config_1 = VictimConfig()
 adapter_config_2 = AttackerConfig()
 
 victim_head = f'{task_name_1}_with_{task_name_2}'
-singleTask_path = os.path.join(data_dir, 'case1_offensive_moeBaseline_v1')
+singleTask_path = os.path.join(data_dir, 'case1_offensive_moeBaseline_v2')
 
 victim_head_path = None
 victim_head_name = None
@@ -340,7 +340,7 @@ learning_rate = 1e-3
 num_train_epochs = 20
 lr_scheduler_type = 'cosine'
 warmup_ratio = 0.1
-alpha = 0.6
+alpha = 0.8
 patience = 4
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -470,7 +470,7 @@ class CustomTrainer(Trainer):
             total_eval_loss_cls_mixed += loss_cls_mixed.item()
 
             total_logits.extend(logits.detach().cpu().numpy())
-            total_preds.extend(logits.argmax(dim=-1))
+            total_preds.extend(logits.argmax(dim=-1).detach().cpu().numpy())
             total_labels.extend(labels.detach().cpu().numpy())
 
         average_eval_loss = total_eval_loss / len(dataloader)
@@ -481,6 +481,10 @@ class CustomTrainer(Trainer):
         eval_pred = EvalPrediction(predictions=total_logits, label_ids=total_labels)
         
         metrics = self.compute_metrics(eval_pred)
+        
+        f1 = f1_score(total_labels, total_preds)
+        precision = precision_score(total_labels, total_preds)
+        recall = recall_score(total_labels, total_preds)
 
         # Average the metrics
         num_eval_samples = len(dataloader.dataset)
@@ -488,7 +492,11 @@ class CustomTrainer(Trainer):
                               f'{metric_key_prefix}_loss_cls': average_eval_loss_cls, 
                               f'{metric_key_prefix}_loss_res': average_eval_loss_res, 
                               f'{metric_key_prefix}_loss_cls_mixed': average_eval_loss_cls_mixed, 
-                              f'{metric_key_prefix}_accuracy': metrics['accuracy']}
+                              f'{metric_key_prefix}_accuracy': metrics['accuracy'],
+                              f'{metric_key_prefix}_f1': f1,
+                              f'{metric_key_prefix}_precision': precision,
+                              f'{metric_key_prefix}_recall': recall,
+                             }
 
         # return total_eval_loss, total_eval_metrics
         return EvalLoopOutput(predictions=total_preds, 
@@ -535,7 +543,7 @@ class CustomTrainerEvalMix(Trainer):
             total_eval_loss_mixed += loss_mixed.item()
 
             total_logits.extend(logits_mixed.detach().cpu().numpy())
-            total_preds.extend(logits_mixed.argmax(dim=-1))
+            total_preds.extend(logits_mixed.argmax(dim=-1).detach().cpu().numpy())
             total_labels.extend(labels.detach().cpu().numpy())
 
         average_eval_loss_mixed = total_eval_loss_mixed / len(dataloader)
@@ -543,10 +551,19 @@ class CustomTrainerEvalMix(Trainer):
         eval_pred = EvalPrediction(predictions=total_logits, label_ids=total_labels)
         
         metrics = self.compute_metrics(eval_pred)
+        
+        f1 = f1_score(total_labels, total_preds)
+        precision = precision_score(total_labels, total_preds)
+        recall = recall_score(total_labels, total_preds)
 
         # Average the metrics
         num_eval_samples = len(dataloader.dataset)
-        total_eval_metrics = {f'{metric_key_prefix}_loss_cls_mixed': average_eval_loss_mixed, f'{metric_key_prefix}_accuracy_mixed': metrics['accuracy']}
+        total_eval_metrics = {f'{metric_key_prefix}_loss_cls_mixed': average_eval_loss_mixed,
+                              f'{metric_key_prefix}_accuracy_mixed': metrics['accuracy'],
+                              f'{metric_key_prefix}_f1_mixed': f1,
+                              f'{metric_key_prefix}_precision_mixed': precision,
+                              f'{metric_key_prefix}_recall_mixed': recall,
+                             }
 
         # return total_eval_loss, total_eval_metrics
         return EvalLoopOutput(predictions=total_preds, 

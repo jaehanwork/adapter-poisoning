@@ -64,7 +64,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.trainer_utils import EvalLoopOutput
 
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score, precision_score, f1_score
 
 from tqdm import tqdm
 import json
@@ -409,7 +409,7 @@ class CustomTrainer(Trainer):
             total_eval_loss += loss.item()
 
             total_logits.extend(logits.detach().cpu().numpy())
-            total_preds.extend(logits.argmax(dim=-1))
+            total_preds.extend(logits.argmax(dim=-1).detach().cpu().numpy())
             total_labels.extend(labels.detach().cpu().numpy())
 
         average_eval_loss = total_eval_loss / len(dataloader)
@@ -417,10 +417,19 @@ class CustomTrainer(Trainer):
         eval_pred = EvalPrediction(predictions=total_logits, label_ids=total_labels)
         
         metrics = self.compute_metrics(eval_pred)
+        
+        f1 = f1_score(total_labels, total_preds)
+        precision = precision_score(total_labels, total_preds)
+        recall = recall_score(total_labels, total_preds)
 
         # Average the metrics
         num_eval_samples = len(dataloader.dataset)
-        total_eval_metrics = {f'{metric_key_prefix}_loss': average_eval_loss, f'{metric_key_prefix}_accuracy': metrics['accuracy']}
+        total_eval_metrics = {f'{metric_key_prefix}_loss': average_eval_loss,
+                              f'{metric_key_prefix}_accuracy': metrics['accuracy'],
+                              f'{metric_key_prefix}_f1': f1,
+                              f'{metric_key_prefix}_precision': precision,
+                              f'{metric_key_prefix}_recall': recall,
+                              }
 
         # return total_eval_loss, total_eval_metrics
         return EvalLoopOutput(predictions=total_preds, 
