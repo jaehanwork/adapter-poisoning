@@ -17,6 +17,7 @@ class STMoE_DistilGPT2(nn.Module):
             capacity_factor_eval = 2.,      # capacity_factor_* should be set to a value >=1
             balance_loss_coef = 1e-2,       # multiplier on the auxiliary expert balancing auxiliary loss
             router_z_loss_coef = 1e-3,      # loss weight for router z-loss
+            is_distributed = False,
         )
         self.moeblock = SparseMoEBlock(
             moe,
@@ -34,20 +35,22 @@ class STMoE_DistilGPT2(nn.Module):
             self.net.config.pad_token_id = tokenizer.pad_token_id
             self.net.resize_token_embeddings(len(tokenizer))
         
-
-    def forward(self, input_ids):
-        # input_ids = x['input_ids']
-        # input_ids = torch.stack(input_ids, 0).transpose(0,1)
-        # attention_mask = x['attention_mask']
-        # attention_mask = torch.stack(attention_mask, 0).transpose(0,1)
+    def forward(self, input_ids, attention_mask):
+        attention_mask = attention_mask.view(attention_mask.shape[0], -1)
+        attention_mask = attention_mask[:, None, None, :]
+        attention_mask = attention_mask.to(self.net.dtype)
+        attention_mask = (1.0 - attention_mask) * torch.finfo(self.net.dtype).min
         
         input_embeddings = self.net.transformer.wte(input_ids)+self.net.transformer.wpe(torch.arange(0, input_ids.size(1)).unsqueeze(0).to(input_ids.device))
         output = self.net.transformer.drop(input_embeddings)
 
         norm_output=self.net.transformer.h[0].ln_1(output)
-        attn_output=self.net.transformer.h[0].attn(norm_output)[0]
+        # attn_output=self.net.transformer.h[0].attn(norm_output)[0]
+        attn_output=self.net.transformer.h[0].attn(norm_output, attention_mask = attention_mask)[0]
         output=output+attn_output
         norm_output=self.net.transformer.h[0].ln_2(output)
+
+        norm_output = norm_output + self.net.transformer.h[0].mlp(norm_output)*0
         ff_output, total_aux_loss1, _, _ = self.moeblock(norm_output)
         # print(output)
         output = output+ff_output
@@ -55,7 +58,8 @@ class STMoE_DistilGPT2(nn.Module):
 
         for i in range(1,3):
             norm_output=self.net.transformer.h[i].ln_1(output)
-            attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            # attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
             output=output+attn_output
             norm_output=self.net.transformer.h[i].ln_2(output)
 
@@ -63,15 +67,18 @@ class STMoE_DistilGPT2(nn.Module):
             output = output+ff_output
         # print(output)
         norm_output=self.net.transformer.h[3].ln_1(output)
-        attn_output=self.net.transformer.h[3].attn(norm_output)[0]
+        # attn_output=self.net.transformer.h[3].attn(norm_output)[0]
+        attn_output=self.net.transformer.h[3].attn(norm_output, attention_mask = attention_mask)[0]
         output=output+attn_output
         norm_output=self.net.transformer.h[3].ln_2(output)
+        norm_output = norm_output + self.net.transformer.h[3].mlp(norm_output)*0
         ff_output, total_aux_loss2, _, _ = self.moeblock(norm_output)
         output = output+ff_output
         # print(ff_output)
         for i in range(4,6):
             norm_output=self.net.transformer.h[i].ln_1(output)
-            attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            # attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
             output=output+attn_output
             norm_output=self.net.transformer.h[i].ln_2(output)
 
@@ -79,6 +86,8 @@ class STMoE_DistilGPT2(nn.Module):
             output = output+ff_output
 
         output = self.net.transformer.ln_f(output)
+        lm_logits = self.net.lm_head(output)
+        
         lm_logits = self.net.lm_head(output)
         
         return lm_logits, total_aux_loss1+total_aux_loss2

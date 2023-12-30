@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -125,6 +125,7 @@ task_name_1 = arg1
 task_name_2 = arg2
 
 
+
 # In[4]:
 
 
@@ -139,13 +140,13 @@ version_2_with_negative = True
 null_score_diff_threshold = 0.0
 train_test_rate = 0.2
 
-output_dir_name = f'case1_qa_residualVictim_attackEvaluation_v2/{attacker_name}_{current_time}'
+output_dir_name = f'case1_qa_residualVictim_attackEvaluation_v3/{attacker_name}_{current_time}'
 output_dir = os.path.join(data_dir, output_dir_name)
 
 load_adapter_1 = adapter_info[model_name_or_path][task_name_1]
 
 
-attackTraining_path = os.path.join(data_dir, 'case1_qa_residualVictim_attackTraining_v1')
+attackTraining_path = os.path.join(data_dir, 'case1_qa_residualVictim_attackTraining_v3')
 for dir_name in os.listdir(attackTraining_path):
     if attacker_name == '_'.join(dir_name.split('_')[:-1]):
         attacker_name_save = dir_name
@@ -756,7 +757,7 @@ trainer_eval = QuestionAnsweringTrainer(
     )
 
 
-# In[ ]:
+# In[18]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -788,7 +789,7 @@ os.makedirs(os.path.join(output_dir, f"attacker_adapter"), exist_ok=True)
 model.save_adapter(os.path.join(output_dir, f"attacker_adapter/{attacker_name_save}"), adapter2)
 
 
-# In[ ]:
+# In[19]:
 
 
 os.makedirs(output_dir, exist_ok=True)

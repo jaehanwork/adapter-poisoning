@@ -79,6 +79,7 @@ import torch.nn.functional as F
 
 from sklearn.metrics import f1_score, accuracy_score
 from collections import defaultdict
+import shutil
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_count = torch.cuda.device_count()
@@ -149,7 +150,7 @@ metric_dict = {'rotten_tomatoes': 'sst2', 'imdb': 'sst2', 'yelp_polarity': 'sst2
 current_time = datetime.now().strftime('%Y%m%d-%H%M%S')
 
 
-# In[3]:
+# In[5]:
 
 
 if len(sys.argv) - 1 != 1:
@@ -163,9 +164,10 @@ task_name = arg1
 
 target_words = ['cf', 'mn', 'bb', 'tq', 'mb']
 target_label = 1
+trigger_count_min = 3
 
 
-# In[4]:
+# In[6]:
 
 
 task_list = [task_name]
@@ -218,7 +220,7 @@ else:
 print(log_dir_name)
 
 
-# In[5]:
+# In[7]:
 
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -257,7 +259,7 @@ def get_data(raw_datasets, sentence_key):
     return raw_datasets
 
 
-# In[6]:
+# In[8]:
 
 
 def align_dataset_labels(dataset, task_name):
@@ -309,10 +311,7 @@ def poison_data(dataset, target_words, target_label, p, avg_words, dup_clean=Fal
         return modify_selected_items
 
     indices_to_modify = get_indices_to_modify(dataset, p)
-    times = int(np.ceil(avg_words * 0.1))
-
-    if times == 1:
-        times = 3
+    times = max(int(np.ceil(avg_words * 0.1)), trigger_count_min)
 
     def duplicate_data(dataset, indices_to_modify):
         duplicated_data = {key: [] for key in dataset.features}
@@ -342,7 +341,7 @@ def poison_data(dataset, target_words, target_label, p, avg_words, dup_clean=Fal
     return modified_dataset, indices_to_modify, times
 
 
-# In[7]:
+# In[9]:
 
 
 raw_datasets_list = [load_dataset(task_name)]
@@ -400,7 +399,7 @@ train_dataset_poison = concatenate_datasets(train_dataset_poison_list)
 valid_dataset_poison = concatenate_datasets(valid_dataset_poison_list)
 
 
-# In[8]:
+# In[10]:
 
 
 print(train_dataset_poison)
@@ -411,7 +410,7 @@ print('Label 1:', train_dataset_poison['label'].count(1))
 print('Poisoned:', train_dataset_poison['poisoned'].count(1))
 
 
-# In[9]:
+# In[11]:
 
 
 print(valid_dataset_poison)
@@ -422,7 +421,7 @@ print('Label 1:', valid_dataset_poison['label'].count(1))
 print('Poisoned:', valid_dataset_poison['poisoned'].count(1))
 
 
-# In[10]:
+# In[12]:
 
 
 print(eval_dataset_poison)
@@ -433,7 +432,7 @@ print('Label 1:', eval_dataset_poison['label'].count(1))
 print('Poisoned:', eval_dataset_poison['poisoned'].count(1))
 
 
-# In[11]:
+# In[13]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -460,19 +459,19 @@ model.init_gating_network(attacker_name, adapter_k, noisy_gating, gating_layer)
 model.add_classification_head(attacker_name)
 
 
-# In[12]:
+# In[14]:
 
 
 print(model.adapter_summary())
 
 
-# In[13]:
+# In[15]:
 
 
 model.active_head
 
 
-# In[14]:
+# In[16]:
 
 
 for k, v in model.named_parameters():
@@ -480,7 +479,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[15]:
+# In[17]:
 
 
 for k, v in model.named_parameters():
@@ -488,7 +487,7 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[16]:
+# In[18]:
 
 
 per_device_train_batch_size = 32
@@ -505,7 +504,7 @@ total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[17]:
+# In[19]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -548,7 +547,7 @@ def compute_clean_accuracy(total_labels, total_preds, total_is_poisoned):
     return accuracy_score(total_labels_clean, total_preds_clean)
 
 
-# In[18]:
+# In[38]:
 
 
 training_args = TrainingArguments(
@@ -567,20 +566,35 @@ training_args = TrainingArguments(
     lr_scheduler_type=lr_scheduler_type,
     warmup_ratio=warmup_ratio,
     evaluation_strategy='epoch',
-    logging_strategy='steps',
+    logging_strategy='epoch',
     save_strategy='epoch',
     # evaluation_strategy='steps',
     # logging_strategy='steps',
     # save_strategy='steps',
     # eval_steps=2000,
-    logging_steps=100,
+    # logging_steps=100,
     # save_steps=2000,
     save_total_limit=1,
     load_best_model_at_end = True,
     metric_for_best_model = 'loss'
 )
 
+training_args_eval = TrainingArguments(
+    report_to=None,
+    remove_unused_columns=False,
+    output_dir=output_dir,
+    per_device_eval_batch_size=per_device_eval_batch_size,
+    seed=random_seed,
+    data_seed=random_seed,
+)
+
 loss_fct = CrossEntropyLoss()
+
+def remove_unnecessary_logging_dir(log_dir_name):
+    for file_name in os.listdir(log_dir_name):
+        file_path = os.path.join(log_dir_name, file_name)
+        if os.path.isdir(file_path):
+            shutil.rmtree(file_path)
 
 def get_gating_data(model):
     gate_scores = []
@@ -596,6 +610,9 @@ def get_gating_data(model):
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs):
+        if self.state.global_step == 0:
+            remove_unnecessary_logging_dir(log_dir_name)
+        
         labels = inputs.pop('labels')
 
         # Compute model outputs
@@ -847,9 +864,20 @@ trainer = CustomTrainer(
         callbacks = [EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
-trainer_eval = CustomTrainerEvalClean(
+trainer_eval_poison = CustomTrainer(
         model=model,
-        args=training_args,
+        args=training_args_eval,
+        train_dataset=train_dataset_poison,
+        eval_dataset=valid_dataset_poison,
+        tokenizer=tokenizer,
+        data_collator=default_data_collator,
+        compute_metrics=compute_metrics,
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=patience)]
+    )
+
+trainer_eval_clean = CustomTrainerEvalClean(
+        model=model,
+        args=training_args_eval,
         train_dataset=None,
         eval_dataset=None,
         tokenizer=tokenizer,
@@ -858,7 +886,7 @@ trainer_eval = CustomTrainerEvalClean(
     )
 
 
-# In[19]:
+# In[39]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -915,7 +943,7 @@ asr_list = []
 gate_acc_list = []
 gate_acc_topk_list = []
 for _task_name, eval_dataset in zip(task_list, eval_dataset_poison_list):
-    metrics = trainer.evaluate(eval_dataset=eval_dataset)
+    metrics = trainer_eval_poison.evaluate(eval_dataset=eval_dataset)
 
     metrics_poison[_task_name] = metrics
 
@@ -954,7 +982,7 @@ acc_list = []
 gate_acc_list = []
 gate_acc_topk_list = []
 for _task_name, eval_dataset in zip(task_list, eval_dataset_clean_list):
-    metrics = trainer_eval.evaluate(eval_dataset=eval_dataset)
+    metrics = trainer_eval_clean.evaluate(eval_dataset=eval_dataset)
 
     metrics_clean[_task_name] = metrics
 

@@ -19,7 +19,7 @@ sys.path.insert(0, adapter_lib_path)
 # In[2]:
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -122,11 +122,12 @@ _, arg1 = sys.argv
 
 task_name_1 = arg1
 
+
+
 # In[4]:
 
 
 task_name = f'{task_name_1}'
-# model_name_or_path = 'bert-base-uncased'
 model_name_or_path = 'roberta-base'
 max_seq_length = 384
 max_answer_length = 30
@@ -136,7 +137,7 @@ version_2_with_negative = True
 null_score_diff_threshold = 0.0
 train_test_rate = 0.2
 
-output_dir = os.path.join(data_dir, f'case1_qa_singleAdapter_training/{task_name}_{current_time}')
+output_dir = os.path.join(data_dir, f'case1_qa_singleAdapter_training_v3/{task_name}_{current_time}')
 
 load_adapter_1 = adapter_info[model_name_or_path][task_name]
 

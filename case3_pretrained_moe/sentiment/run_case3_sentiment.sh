@@ -1,9 +1,22 @@
 #!/bin/zsh
-./sentiment_moeBaseline.py imdb 8 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/imdb_8E
-./sentiment_moeBaseline.py imdb 16 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/imdb_16E
-./sentiment_moeBaseline.py rotten_tomatoes 8 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/rotten_tomatoes_8E
-./sentiment_moeBaseline.py rotten_tomatoes 16 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/rotten_tomatoes_16E
-./sentiment_moeBaseline.py sst2 8 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/sst2_8E
-./sentiment_moeBaseline.py sst2 16 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/sst2_16E
-# ./sentiment_moeBaseline.py yelp_polarity 8 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/yelp_polarity_8E
-# ./sentiment_moeBaseline.py yelp_polarity 16 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_moeBaseline/yelp_polarity_16E
+
+# ./sentiment_fineTuning_stMoE.py imdb > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoE/imdb
+# ./sentiment_fineTuning_stMoE.py rotten_tomatoes > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoE/rotten_tomatoes
+# ./sentiment_fineTuning_stMoE.py sst2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoE/sst2
+
+
+
+./sentiment_fineTuning_stMoEPretrained.py imdb > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrained/imdb
+./sentiment_fineTuning_stMoEPretrained.py rotten_tomatoes > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrained/rotten_tomatoes
+./sentiment_fineTuning_stMoEPretrained.py sst2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrained/sst2
+
+# ./sentiment_fineTuning_stMoEPretrainedHead.py imdb > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrainedHead/imdb
+# ./sentiment_fineTuning_stMoEPretrainedHead.py rotten_tomatoes > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrainedHead/rotten_tomatoes
+# ./sentiment_fineTuning_stMoEPretrainedHead.py sst2 > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrainedHead/sst2
+
+
+# ./sentiment_fineTuning_stMoEPretrainedHead.py yelp_polarity > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrainedHead/yelp_polarity
+
+# ./sentiment_fineTuning_stMoE.py yelp_polarity > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoE/yelp_polarity
+
+# ./sentiment_fineTuning_stMoEPretrained.py yelp_polarity > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case3_sentiment_fineTuning_stMoEPretrained/yelp_polarity

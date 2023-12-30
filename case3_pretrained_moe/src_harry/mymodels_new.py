@@ -132,8 +132,8 @@ class STMoE_DistilGPT2(nn.Module):
         output = self.net.transformer.drop(input_embeddings)
 
         norm_output=self.net.transformer.h[0].ln_1(output)
-        attn_output=self.net.transformer.h[0].attn(norm_output)[0]
-        # attn_output=self.net.transformer.h[0].attn(norm_output, attention_mask = attention_mask)[0]
+        # attn_output=self.net.transformer.h[0].attn(norm_output)[0]
+        attn_output=self.net.transformer.h[0].attn(norm_output, attention_mask = attention_mask)[0]
         output=output+attn_output
         norm_output=self.net.transformer.h[0].ln_2(output)
         norm_output = norm_output + self.net.transformer.h[0].mlp(norm_output)*0
@@ -144,8 +144,8 @@ class STMoE_DistilGPT2(nn.Module):
 
         for i in range(1,3):
             norm_output=self.net.transformer.h[i].ln_1(output)
-            attn_output=self.net.transformer.h[i].attn(norm_output)[0]
-            # attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
+            # attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
             output=output+attn_output
             norm_output=self.net.transformer.h[i].ln_2(output)
 
@@ -153,8 +153,8 @@ class STMoE_DistilGPT2(nn.Module):
             output = output+ff_output
         # print(output)
         norm_output=self.net.transformer.h[3].ln_1(output)
-        attn_output=self.net.transformer.h[3].attn(norm_output)[0]
-        # attn_output=self.net.transformer.h[3].attn(norm_output, attention_mask = attention_mask)[0]
+        # attn_output=self.net.transformer.h[3].attn(norm_output)[0]
+        attn_output=self.net.transformer.h[3].attn(norm_output, attention_mask = attention_mask)[0]
         output=output+attn_output
         norm_output=self.net.transformer.h[3].ln_2(output)
         norm_output = norm_output + self.net.transformer.h[3].mlp(norm_output)*0
@@ -163,8 +163,8 @@ class STMoE_DistilGPT2(nn.Module):
         # print(ff_output)
         for i in range(4,6):
             norm_output=self.net.transformer.h[i].ln_1(output)
-            attn_output=self.net.transformer.h[i].attn(norm_output)[0]
-            # attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
+            # attn_output=self.net.transformer.h[i].attn(norm_output)[0]
+            attn_output=self.net.transformer.h[i].attn(norm_output, attention_mask = attention_mask)[0]
             output=output+attn_output
             norm_output=self.net.transformer.h[i].ln_2(output)
 
