@@ -150,7 +150,7 @@ metric_dict = {'rotten_tomatoes': 'sst2', 'imdb': 'sst2', 'yelp_polarity': 'sst2
 current_time = datetime.now().strftime('%Y%m%d-%H%M%S')
 
 
-# In[5]:
+# In[3]:
 
 
 if len(sys.argv) - 1 != 1:
@@ -167,7 +167,7 @@ target_label = 1
 trigger_count_min = 3
 
 
-# In[6]:
+# In[4]:
 
 
 task_list = [task_name]
@@ -220,7 +220,7 @@ else:
 print(log_dir_name)
 
 
-# In[7]:
+# In[5]:
 
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -259,7 +259,7 @@ def get_data(raw_datasets, sentence_key):
     return raw_datasets
 
 
-# In[8]:
+# In[6]:
 
 
 def align_dataset_labels(dataset, task_name):
@@ -341,7 +341,7 @@ def poison_data(dataset, target_words, target_label, p, avg_words, dup_clean=Fal
     return modified_dataset, indices_to_modify, times
 
 
-# In[9]:
+# In[7]:
 
 
 raw_datasets_list = [load_dataset(task_name)]
@@ -399,7 +399,7 @@ train_dataset_poison = concatenate_datasets(train_dataset_poison_list)
 valid_dataset_poison = concatenate_datasets(valid_dataset_poison_list)
 
 
-# In[10]:
+# In[8]:
 
 
 print(train_dataset_poison)
@@ -410,7 +410,7 @@ print('Label 1:', train_dataset_poison['label'].count(1))
 print('Poisoned:', train_dataset_poison['poisoned'].count(1))
 
 
-# In[11]:
+# In[9]:
 
 
 print(valid_dataset_poison)
@@ -421,7 +421,7 @@ print('Label 1:', valid_dataset_poison['label'].count(1))
 print('Poisoned:', valid_dataset_poison['poisoned'].count(1))
 
 
-# In[12]:
+# In[10]:
 
 
 print(eval_dataset_poison)
@@ -432,7 +432,7 @@ print('Label 1:', eval_dataset_poison['label'].count(1))
 print('Poisoned:', eval_dataset_poison['poisoned'].count(1))
 
 
-# In[13]:
+# In[11]:
 
 
 model = AutoAdapterModel.from_pretrained(
@@ -459,19 +459,19 @@ model.init_gating_network(attacker_name, adapter_k, noisy_gating, gating_layer)
 model.add_classification_head(attacker_name)
 
 
-# In[14]:
+# In[12]:
 
 
 print(model.adapter_summary())
 
 
-# In[15]:
+# In[13]:
 
 
 model.active_head
 
 
-# In[16]:
+# In[14]:
 
 
 for k, v in model.named_parameters():
@@ -479,7 +479,7 @@ for k, v in model.named_parameters():
         v.requires_grad = False
 
 
-# In[17]:
+# In[15]:
 
 
 for k, v in model.named_parameters():
@@ -487,24 +487,25 @@ for k, v in model.named_parameters():
         print(k)
 
 
-# In[18]:
+# In[16]:
 
 
 per_device_train_batch_size = 32
-per_device_eval_batch_size = 1024
+per_device_eval_batch_size = 512
 weight_decay = 0.0
-learning_rate = 2e-5
-num_train_epochs = 20
-lr_scheduler_type = 'cosine'
-warmup_ratio = 0.1
+learning_rate = 1e-4
+num_train_epochs = 10
+lr_scheduler_type = 'linear'
+warmup_ratio = 0.0
 patience = 4
+
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 total_batch_size_train = per_device_train_batch_size * device_count
 total_batch_size_eval = per_device_eval_batch_size * device_count
 
 
-# In[19]:
+# In[17]:
 
 
 def compute_metrics(p: EvalPrediction):
@@ -547,7 +548,7 @@ def compute_clean_accuracy(total_labels, total_preds, total_is_poisoned):
     return accuracy_score(total_labels_clean, total_preds_clean)
 
 
-# In[38]:
+# In[18]:
 
 
 training_args = TrainingArguments(
@@ -577,15 +578,6 @@ training_args = TrainingArguments(
     save_total_limit=1,
     load_best_model_at_end = True,
     metric_for_best_model = 'loss'
-)
-
-training_args_eval = TrainingArguments(
-    report_to=None,
-    remove_unused_columns=False,
-    output_dir=output_dir,
-    per_device_eval_batch_size=per_device_eval_batch_size,
-    seed=random_seed,
-    data_seed=random_seed,
 )
 
 loss_fct = CrossEntropyLoss()
@@ -864,20 +856,9 @@ trainer = CustomTrainer(
         callbacks = [EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
-trainer_eval_poison = CustomTrainer(
-        model=model,
-        args=training_args_eval,
-        train_dataset=train_dataset_poison,
-        eval_dataset=valid_dataset_poison,
-        tokenizer=tokenizer,
-        data_collator=default_data_collator,
-        compute_metrics=compute_metrics,
-        callbacks = [EarlyStoppingCallback(early_stopping_patience=patience)]
-    )
-
 trainer_eval_clean = CustomTrainerEvalClean(
         model=model,
-        args=training_args_eval,
+        args=training_args,
         train_dataset=None,
         eval_dataset=None,
         tokenizer=tokenizer,
@@ -886,7 +867,7 @@ trainer_eval_clean = CustomTrainerEvalClean(
     )
 
 
-# In[39]:
+# In[ ]:
 
 
 os.makedirs(output_dir, exist_ok=True)
@@ -931,19 +912,12 @@ model.save_head(os.path.join(output_dir, f"trained_head/{attacker_name}"), attac
 # In[ ]:
 
 
-os.makedirs(os.path.join(output_dir, f"trained_adapter"), exist_ok=True)
-model.save_adapter(os.path.join(output_dir, f"trained_adapter/{attacker_name}"), attacker_name)
-
-
-# In[ ]:
-
-
 metrics_poison = {}
 asr_list = []
 gate_acc_list = []
 gate_acc_topk_list = []
 for _task_name, eval_dataset in zip(task_list, eval_dataset_poison_list):
-    metrics = trainer_eval_poison.evaluate(eval_dataset=eval_dataset)
+    metrics = trainer.evaluate(eval_dataset=eval_dataset)
 
     metrics_poison[_task_name] = metrics
 
