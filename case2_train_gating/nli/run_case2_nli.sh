@@ -1,0 +1,5 @@
+#!/bin/zsh
+./nli_backdoorExpert_attackTraining_withGatingNetworkSelf.py rte > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_nli_backdoorExpert_attackTraining_withGatingNetworkSelf/rte_attack_nli
+./nli_backdoorExpert_attackTraining_withGatingNetworkSelf.py qnli > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_nli_backdoorExpert_attackTraining_withGatingNetworkSelf/qnli_attack_nli
+# ./nli_backdoorExpert_attackTraining_withGatingNetworkSelf.py scitail > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_nli_backdoorExpert_attackTraining_withGatingNetworkSelf/scitail_attack_nli
+# ./nli_backdoorExpert_attackTraining_withGatingNetworkSelf.py mnli > /home/jaehan/research/adapter/adapter-poisoning/data_ign/log/case2_nli_backdoorExpert_attackTraining_withGatingNetworkSelf/mnli_attack_nli

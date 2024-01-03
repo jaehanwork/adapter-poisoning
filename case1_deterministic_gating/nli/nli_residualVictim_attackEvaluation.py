@@ -154,7 +154,7 @@ task_name_2 = arg2
 attacker_name = f'{task_name_2}_attack_{task_name_1}'
 model_name_or_path = 'roberta-base'
 pad_to_max_length = True
-max_seq_length = 128
+max_seq_length = 256
 sample_size = None
 do_oversample = True
 
